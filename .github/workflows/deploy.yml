@@ -10,7 +10,7 @@ name: Deploy
 
 on:
   push:
-    branches: [main]
+    branches: [master] # git flow: master = produzione (release/hotfix)
   workflow_dispatch:
 
 jobs:

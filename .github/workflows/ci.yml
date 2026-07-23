@@ -1,0 +1,24 @@
+name: CI
+
+# Verifica in sviluppo: gira sui push a develop e sulle PR verso develop/master.
+# Il deploy in produzione è gestito separatamente da deploy.yml (push su master).
+on:
+  push:
+    branches: [develop]
+  pull_request:
+    branches: [master, develop]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm install --no-audit --no-fund
+      - name: Build frontend
+        run: npm run build --workspace frontend
+      - name: Controllo sintassi backend
+        run: find backend/src -name '*.js' -print0 | xargs -0 -n1 node --check
