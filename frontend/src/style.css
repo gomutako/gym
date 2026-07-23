@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Reset di base mobile-first */
+html,
+body,
+#app {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  background-color: #f9fafb; /* gray-50 */
+  color: #111827; /* gray-900 */
+  /* Evita il "rubber banding" fastidioso su iOS quando c'è una bottom nav */
+  overscroll-behavior-y: none;
+}

@@ -1,0 +1,21 @@
+# Dipendenze
+node_modules/
+
+# Build output
+dist/
+frontend/dist/
+
+# Variabili d'ambiente (mai committare le chiavi reali!)
+.env
+.env.*
+!.env.example
+!.env.production.example
+
+# Log
+*.log
+npm-debug.log*
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/

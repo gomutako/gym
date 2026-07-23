@@ -1,0 +1,20 @@
+# systemd unit per il backend Fastify.
+# Copia in /etc/systemd/system/gym-backend.service, poi:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now gym-backend
+[Unit]
+Description=Gym Manager backend (Fastify)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/gym/backend
+EnvironmentFile=/opt/gym/backend/.env
+ExecStart=/usr/bin/node src/server.js
+Restart=always
+RestartSec=3
+User=gym
+Group=gym
+
+[Install]
+WantedBy=multi-user.target

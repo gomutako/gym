@@ -1,0 +1,25 @@
+# Caddyfile — reverse proxy con HTTPS automatico (Let's Encrypt).
+# Sostituisci app.esempio.com / supabase.esempio.com con i tuoi sottodomini.
+# Entrambi devono puntare (record A) all'IP pubblico dell'EC2.
+
+# --- App: frontend statico + API backend ---
+app.esempio.com {
+    encode zstd gzip
+
+    # Le chiamate /api/* vanno al backend Fastify
+    handle /api/* {
+        reverse_proxy 127.0.0.1:3000
+    }
+
+    # Tutto il resto: SPA Vue (build in dist/), con fallback su index.html
+    handle {
+        root * /opt/gym/frontend/dist
+        try_files {path} /index.html
+        file_server
+    }
+}
+
+# --- Supabase self-host (gateway Kong sulla 8000) ---
+supabase.esempio.com {
+    reverse_proxy 127.0.0.1:8000
+}

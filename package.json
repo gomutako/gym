@@ -1,0 +1,27 @@
+{
+  "name": "gym-manager",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Web app mobile-first per la gestione di una palestra (Vue 3 + Fastify + Supabase)",
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspaces --if-present",
+    "dev:fe": "npm run dev --workspace frontend",
+    "dev:be": "npm run dev --workspace backend",
+    "build": "npm run build --workspace frontend",
+    "seed": "node scripts/seed.mjs",
+    "db:start": "supabase start",
+    "db:stop": "supabase stop",
+    "db:reset": "supabase db reset",
+    "db:status": "supabase status"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "supabase": "^2.109.1"
+  }
+}
