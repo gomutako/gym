@@ -1,0 +1,11 @@
+# Copia in terraform.tfvars e personalizza.
+aws_region    = "eu-west-1"
+instance_type = "t4g.medium"    # 4GB. Usa "t4g.small" (2GB) solo con swap
+key_name      = "la-mia-keypair" # key pair EC2 già esistente
+repo_url      = "https://github.com/tuo-utente/gym.git"
+ssh_cidr      = "0.0.0.0/0"      # meglio: "IL.TUO.IP.PUBBLICO/32"
+
+# --- DNS opzionale via Route53 (se il dominio è gestito lì) ---
+# create_dns      = true
+# route53_zone_id = "Z0123456789ABCDEFGHIJ"
+# domain          = "esempio.com"

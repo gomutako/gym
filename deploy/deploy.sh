@@ -11,7 +11,7 @@ set -euo pipefail
 # Vai alla root del repo (cartella genitore di questo script)
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-BRANCH="${DEPLOY_BRANCH:-main}"
+BRANCH="${DEPLOY_BRANCH:-master}"
 
 echo "▶ Aggiorno il codice (origin/$BRANCH)…"
 git fetch --prune origin

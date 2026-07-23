@@ -22,7 +22,24 @@ Lo stack Supabase (Postgres, Auth, PostgREST, Storage, Kong, ecc.) è pesante:
 Security group: apri **22 (SSH), 80, 443**. DNS: due record **A**
 (`app` e `supabase`) verso l'IP pubblico (Elastic IP consigliato).
 
-## 1. Pacchetti base (Ubuntu 24.04)
+## Provisioning automatico (opzionale, sostituisce i passi 1-2)
+
+Se hai l'AWS CLI configurato (`aws configure`) e una key pair EC2, puoi creare
+l'istanza già pronta con un comando. `deploy/provision-ec2.sh` crea il security
+group e lancia l'istanza; `deploy/cloud-init.sh` (user-data) installa da solo al
+primo avvio swap, Docker, Node, Caddy, l'utente `gym` e clona il repo.
+
+```bash
+KEY_NAME=la-mia-keypair \
+REPO_URL=https://github.com/tuo-utente/gym.git \
+AWS_REGION=eu-west-1 INSTANCE_TYPE=t4g.medium \
+./deploy/provision-ec2.sh
+```
+Attendi 2-3 minuti (bootstrap), poi **salta ai passi 3+** (Supabase, migration, ecc.).
+Provisioning e deploy restano **separati**: creare l'istanza è una-tantum, mentre
+`deploy/deploy.sh` aggiorna solo l'app.
+
+## 1. Pacchetti base (Ubuntu 24.04) — solo se NON usi il provisioning automatico
 
 ```bash
 sudo apt update && sudo apt -y upgrade
@@ -55,11 +72,13 @@ cd supabase/docker
 cp .env.example .env
 ```
 
-Nel file `.env` imposta **valori sicuri** (NON i default demo):
-- `POSTGRES_PASSWORD` — password forte
-- `JWT_SECRET` — stringa random ≥ 40 caratteri
-- `ANON_KEY` e `SERVICE_ROLE_KEY` — generali coerenti col `JWT_SECRET`
-  con il generatore ufficiale: https://supabase.com/docs/guides/self-hosting/docker#generate-api-keys
+**Genera le chiavi** con lo script incluso (JWT_SECRET + ANON_KEY + SERVICE_ROLE_KEY
+coerenti + password), poi incolla i valori nei file indicati dall'output:
+```bash
+node deploy/supabase-gen-keys.mjs
+```
+Nel file `.env` imposta questi **valori sicuri** (NON i default demo):
+- `POSTGRES_PASSWORD`, `JWT_SECRET`, `ANON_KEY`, `SERVICE_ROLE_KEY` — dallo script sopra
 - `DASHBOARD_USERNAME` / `DASHBOARD_PASSWORD` — accesso a Studio
 - `SITE_URL=https://app.tuodominio.com`
 - `API_EXTERNAL_URL=https://supabase.tuodominio.com`
@@ -80,16 +99,13 @@ docker compose ps   # tutti "healthy"
 
 ## 4. Schema del database (le nostre migration)
 
-Le migration in `supabase/migrations/` del progetto creano tabelle, RLS, il bucket
-`exercise-images` e le policy Storage. Applicale in ordine al Postgres del self-host:
+Le migration in `supabase/migrations/` creano tabelle, RLS, il bucket
+`exercise-images` e le policy Storage. Applicale con lo script incluso:
 
 ```bash
-# dalla cartella del PROGETTO gym, con il container db in ascolto su 5432
-for f in supabase/migrations/*.sql; do
-  docker exec -i supabase-db psql -U postgres -d postgres < "$f"
-done
+./deploy/apply-migrations.sh
+# se il container DB ha un altro nome:  DB_CONTAINER=supabase_db_xxx ./deploy/apply-migrations.sh
 ```
-(Il nome container potrebbe essere `supabase-db` o `supabase_db_*`: verifica con `docker ps`.)
 
 ## 5. App: backend + frontend
 
@@ -125,8 +141,7 @@ Caddy ottiene i certificati Let's Encrypt da solo al primo accesso HTTPS.
 
 Registrati dall'app (diventi `member`), poi promuoviti ad admin:
 ```bash
-docker exec -i supabase-db psql -U postgres -d postgres \
-  -c "update public.profiles set role='admin' where id = (select id from auth.users where email='tua@email.com');"
+./deploy/make-admin.sh tua@email.com
 ```
 
 ## 8. Verifiche
@@ -137,15 +152,21 @@ docker exec -i supabase-db psql -U postgres -d postgres \
 
 ## Aggiornamenti & manutenzione
 - **Aggiornare a mano:** `cd /opt/gym && ./deploy/deploy.sh`
-- **Nuove migration:** applicale con lo stesso `for` del passo 4 (lo script NON le esegue)
-- **Backup DB:** `docker exec supabase-db pg_dump -U postgres postgres > backup_$(date +%F).sql` (schedula in cron)
+- **Nuove migration:** `./deploy/apply-migrations.sh` (il deploy dell'app NON le esegue)
+- **Backup DB (manuale):** `./deploy/backup-db.sh` (dump compresso in `/opt/gym/backups`, rotazione 14 giorni)
+- **Backup DB (automatico giornaliero):**
+  ```bash
+  sudo cp /opt/gym/deploy/gym-backup.{service,timer} /etc/systemd/system/
+  sudo systemctl daemon-reload && sudo systemctl enable --now gym-backup.timer
+  systemctl list-timers gym-backup.timer   # prossima esecuzione
+  ```
 - **Log backend:** `journalctl -u gym-backend -f`
 
 ## 9. Deploy automatico (opzionale)
 
 Sono inclusi:
 - `deploy/deploy.sh` — script on-server: `git reset --hard`, `npm install`, build frontend, restart backend
-- `.github/workflows/deploy.yml` — GitHub Action: builda (gate) e poi esegue lo script via SSH ad ogni push su `main`
+- `.github/workflows/deploy.yml` — GitHub Action: builda (gate) e poi esegue lo script via SSH ad ogni push su `master` (produzione, git flow)
 
 Prerequisiti sul server perché lo script/CI riavvii il backend senza password:
 ```bash
@@ -167,5 +188,5 @@ Su GitHub → **Settings → Secrets and variables → Actions**, crea:
 | `DEPLOY_SSH_KEY` | contenuto di `deploy_key` (chiave **privata**) |
 | `DEPLOY_PORT` | (opzionale) porta SSH se diversa da 22 |
 
-Da qui in poi ogni `git push` su `main` builda e rilascia in automatico
-(oppure lancialo a mano da **Actions → Deploy → Run workflow**).
+Da qui in poi ogni `git push` su `master` (nel git flow: una release/hotfix)
+builda e rilascia in automatico — oppure lancialo a mano da **Actions → Deploy → Run workflow**.

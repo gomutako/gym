@@ -15,6 +15,13 @@ frontend/dist/
 *.log
 npm-debug.log*
 
+# Terraform (stato con dati sensibili, cache provider)
+.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+*.tfplan
+
 # Editor / OS
 .DS_Store
 .vscode/
