@@ -4,6 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Web app mobile-first per la gestione di una palestra. Monorepo npm workspaces: `frontend/` (Vue 3), `backend/` (Fastify), `supabase/` (migrations). Tre ruoli: **admin**, **trainer**, **member**.
 
+> Per rimettere in piedi l'ambiente su una macchina nuova (cosa non è nel repo, segreti, stato produzione, casi di emergenza) vedi **`HANDOVER.md`**. Per il deploy: **`DEPLOY.md`**.
+
 ## Comandi
 
 ```bash
