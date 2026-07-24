@@ -108,7 +108,6 @@ if (!exercisesOnly) {
 const catalog = [
   // ---- Gambe / polpacci ----
   { name: 'Squat con bilanciere', muscle_group: 'Gambe', load_type: 'weight',
-    video_url: 'https://www.youtube.com/watch?v=aclHkVaku9U',
     description: 'Bilanciere sulle spalle, piedi larghezza spalle. Scendi spingendo i fianchi indietro fino a coscia parallela, poi risali spingendo sui talloni.' },
   { name: 'Leg press', muscle_group: 'Gambe', load_type: 'weight',
     description: 'Seduto alla pressa, piedi a metà pedana. Spingi la piattaforma estendendo le gambe senza bloccare le ginocchia, poi rientra controllato.' },
@@ -135,7 +134,6 @@ const catalog = [
 
   // ---- Petto ----
   { name: 'Panca piana con bilanciere', muscle_group: 'Petto', load_type: 'weight',
-    video_url: 'https://www.youtube.com/watch?v=rT7DgCr-3pg',
     description: 'Scapole retratte, piedi a terra. Scendi il bilanciere al petto controllato, poi spingi verso l\'alto senza staccare i glutei.' },
   { name: 'Panca inclinata con manubri', muscle_group: 'Petto', load_type: 'weight',
     description: 'Schienale a 30-45°. Spingi i manubri verso l\'alto sopra il petto alto, poi scendi controllato ampliando il movimento.' },
@@ -245,14 +243,119 @@ function slug(s) {
     .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 }
 
-const exerciseIdByName = {};
-for (const ex of catalog) {
+// Immagini REALI (Free Exercise DB, public domain): nome esercizio -> path nel repo.
+// https://github.com/yuhonas/free-exercise-db (Unlicense). Se il download fallisce
+// si ricade sul segnaposto SVG colorato.
+const FEDB_BASE = 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises';
+const fedbByName = {
+  'Squat con bilanciere': 'Barbell_Squat/0.jpg',
+  'Leg press': 'Leg_Press/0.jpg',
+  'Leg extension': 'Leg_Extensions/0.jpg',
+  'Leg curl sdraiato': 'Lying_Leg_Curls/0.jpg',
+  'Affondi con manubri': 'Dumbbell_Lunges/0.jpg',
+  'Hack squat': 'Hack_Squat/0.jpg',
+  'Goblet squat': 'Goblet_Squat/0.jpg',
+  'Stacco rumeno': 'Romanian_Deadlift/0.jpg',
+  'Adductor machine': 'Adductor/0.jpg',
+  'Abductor machine': 'Thigh_Abductor/0.jpg',
+  'Bulgarian split squat': 'Smith_Single-Leg_Split_Squat/0.jpg',
+  'Calf raise': 'Standing_Calf_Raises/0.jpg',
+  'Panca piana con bilanciere': 'Barbell_Bench_Press_-_Medium_Grip/0.jpg',
+  'Panca inclinata con manubri': 'Incline_Dumbbell_Press/0.jpg',
+  'Chest press': 'Machine_Bench_Press/0.jpg',
+  'Chiusure alla pectoral machine': 'Butterfly/0.jpg',
+  'Croci ai cavi': 'Cable_Crossover/0.jpg',
+  'Piegamenti sulle braccia': 'Pushups/0.jpg',
+  'Dip alle parallele': 'Dips_-_Chest_Version/0.jpg',
+  'Stacco da terra': 'Barbell_Deadlift/0.jpg',
+  'Lat machine': 'Full_Range-Of-Motion_Lat_Pulldown/0.jpg',
+  'Pulley basso': 'Seated_Cable_Rows/0.jpg',
+  'Rematore con bilanciere': 'Bent_Over_Barbell_Row/0.jpg',
+  'Rematore con manubrio': 'One-Arm_Dumbbell_Row/0.jpg',
+  'Trazioni alla sbarra': 'Pullups/0.jpg',
+  'Pullover con manubrio': 'Bent-Arm_Dumbbell_Pullover/0.jpg',
+  'Seated row machine': 'Leverage_Iso_Row/0.jpg',
+  'Military press': 'Standing_Military_Press/0.jpg',
+  'Shoulder press machine': 'Machine_Shoulder_Military_Press/0.jpg',
+  'Alzate laterali': 'Side_Lateral_Raise/0.jpg',
+  'Alzate frontali': 'Front_Dumbbell_Raise/0.jpg',
+  'Arnold press': 'Arnold_Dumbbell_Press/0.jpg',
+  'Face pull ai cavi': 'Face_Pull/0.jpg',
+  'Curl con bilanciere': 'Barbell_Curl/0.jpg',
+  'Curl con manubri': 'Dumbbell_Bicep_Curl/0.jpg',
+  'Curl a martello': 'Hammer_Curls/0.jpg',
+  'Panca Scott': 'Preacher_Curl/0.jpg',
+  'Curl ai cavi': 'Standing_Biceps_Cable_Curl/0.jpg',
+  'French press': 'Lying_Triceps_Press/0.jpg',
+  'Tricipiti ai cavi': 'Triceps_Pushdown/0.jpg',
+  'Dip per tricipiti': 'Dips_-_Triceps_Version/0.jpg',
+  'Crunch': 'Crunches/0.jpg',
+  'Crunch alla macchina': 'Cable_Crunch/0.jpg',
+  'Russian twist': 'Russian_Twist/0.jpg',
+  'Plank': 'Plank/0.jpg',
+  'Tapis roulant': 'Jogging_Treadmill/0.jpg',
+  'Cyclette': 'Bicycling/0.jpg',
+  'Ellittica': 'Elliptical_Trainer/0.jpg',
+  'Vogatore': 'Rowing_Stationary/0.jpg',
+  'Stair climber': 'Stairmaster/0.jpg',
+};
+
+// Video diretti curati per gli esercizi più comuni (tutorial YouTube).
+// Gli altri ricevono un link di ricerca YouTube (sempre valido).
+const videoByName = {
+  'Squat con bilanciere': 'https://www.youtube.com/watch?v=aclHkVaku9U',
+  'Panca piana con bilanciere': 'https://www.youtube.com/watch?v=3CgfAV84cfM',
+  'Stacco da terra': 'https://www.youtube.com/watch?v=b4NI-OkEnW0',
+  'Military press': 'https://www.youtube.com/watch?v=mywEUpC1oyM',
+  'Lat machine': 'https://www.youtube.com/watch?v=P8QKoy5sjv8',
+  'Rematore con bilanciere': 'https://www.youtube.com/watch?v=cDZh_hx3YgU',
+  'Trazioni alla sbarra': 'https://www.youtube.com/watch?v=m2cauCtWj8E',
+  'Leg press': 'https://www.youtube.com/watch?v=LMTyPl_oo38',
+  'Curl con bilanciere': 'https://www.youtube.com/watch?v=mhrv92jvtc4',
+  'Tricipiti ai cavi': 'https://www.youtube.com/watch?v=8NMnKwaOtB8',
+  'Stacco rumeno': 'https://www.youtube.com/watch?v=Rki1bVYxHok',
+  'Affondi con manubri': 'https://www.youtube.com/watch?v=Jezpb-6fuQ0',
+  'Alzate laterali': 'https://www.youtube.com/watch?v=6sT8LVeGVoc',
+  'Plank': 'https://www.youtube.com/watch?v=Is-7PPaBcsM',
+  'Dip alle parallele': 'https://www.youtube.com/watch?v=SLVwguvd6io',
+  'Panca inclinata con manubri': 'https://www.youtube.com/watch?v=AH4zcrU9P5A',
+};
+
+// Link di ricerca YouTube (fallback per gli esercizi senza video diretto)
+const youtubeSearch = (name) =>
+  `https://www.youtube.com/results?search_query=${encodeURIComponent('come eseguire ' + name)}`;
+
+// Carica un'immagine nel bucket, restituisce il path usato.
+async function uploadImage(ex) {
+  const rel = fedbByName[ex.name];
+  if (rel) {
+    try {
+      const url = `${FEDB_BASE}/${rel.split('/').map(encodeURIComponent).join('/')}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const buf = Buffer.from(await res.arrayBuffer());
+      const path = `seed/${slug(ex.name)}.jpg`;
+      await admin.storage.from('exercise-images').upload(path, buf, { contentType: 'image/jpeg', upsert: true });
+      return path;
+    } catch {
+      // fallback al segnaposto se il download fallisce
+    }
+  }
   const path = `seed/${slug(ex.name)}.svg`;
   await admin.storage.from('exercise-images').upload(
     path,
     Buffer.from(placeholderSvg(ex.name, groupColor[ex.muscle_group] || '#64748b')),
     { contentType: 'image/svg+xml', upsert: true }
   );
+  return path;
+}
+
+console.log(`Popolo il catalogo (${catalog.length} esercizi, scarico le immagini reali)…`);
+const exerciseIdByName = {};
+let realImgs = 0;
+for (const ex of catalog) {
+  const image_path = await uploadImage(ex);
+  if (image_path.endsWith('.jpg')) realImgs++;
   const { data, error } = await admin
     .from('exercises')
     .upsert(
@@ -262,8 +365,8 @@ for (const ex of catalog) {
         description: ex.description,
         load_type: ex.load_type,
         has_incline: ex.has_incline ?? false,
-        video_url: ex.video_url ?? null,
-        image_path: path,
+        video_url: videoByName[ex.name] ?? youtubeSearch(ex.name),
+        image_path,
       },
       { onConflict: 'name' }
     )
@@ -272,6 +375,7 @@ for (const ex of catalog) {
   if (error) throw new Error(`Upsert esercizio "${ex.name}" fallito: ${error.message}`);
   exerciseIdByName[ex.name] = data.id;
 }
+console.log(`  immagini reali caricate: ${realImgs}/${catalog.length} (le altre col segnaposto)`);
 
 // Scheda di esempio per il member: solo nel reset completo
 if (!exercisesOnly) {
