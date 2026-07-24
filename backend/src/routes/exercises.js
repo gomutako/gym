@@ -40,6 +40,7 @@ export default async function exercisesRoutes(fastify) {
             muscle_group: { type: 'string' },
             description: { type: 'string' }, // tecnica/esecuzione
             load_type: { type: 'string', enum: ['weight', 'level'] }, // peso kg vs livello
+            has_incline: { type: 'boolean' }, // registra anche la pendenza % (es. tapis roulant)
             video_url: { type: 'string' }, // link video esecuzione (opzionale)
             image_path: { type: 'string' },
           },

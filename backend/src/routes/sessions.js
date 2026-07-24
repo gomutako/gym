@@ -65,14 +65,14 @@ export default async function sessionsRoutes(fastify) {
       const dayExercises = day.exercises || [];
       const exerciseIds = [...new Set(dayExercises.map((e) => e.exercise_id).filter(Boolean))];
 
-      // load_type dal catalogo (peso kg vs livello)
-      const loadTypeById = {};
+      // Metadati dal catalogo: load_type (peso kg vs livello) e has_incline (pendenza %)
+      const metaById = {};
       if (exerciseIds.length) {
         const { data: cat } = await supabaseAdmin
           .from('exercises')
-          .select('id, load_type')
+          .select('id, load_type, has_incline')
           .in('id', exerciseIds);
-        for (const c of cat || []) loadTypeById[c.id] = c.load_type;
+        for (const c of cat || []) metaById[c.id] = c;
       }
 
       // Prefill: cerca l'ultima sessione COMPLETATA che contiene ciascun esercizio
@@ -99,16 +99,20 @@ export default async function sessionsRoutes(fastify) {
       const exercises_log = dayExercises.map((e) => {
         const prev = lastSetsByExercise[e.exercise_id] || [];
         const nSets = Math.max(1, e.sets || 1);
+        const hasIncline = metaById[e.exercise_id]?.has_incline || false;
         const sets_log = Array.from({ length: nSets }, (_, i) => ({
           reps: prev[i]?.reps ?? e.reps ?? null,
           load: prev[i]?.load ?? null,
+          // pendenza % solo per gli esercizi che la prevedono (es. tapis roulant)
+          ...(hasIncline ? { incline: prev[i]?.incline ?? null } : {}),
           done: false,
         }));
         return {
           exercise_id: e.exercise_id,
           target_reps: e.reps ?? null,
           rest_seconds: e.rest_seconds ?? 0,
-          load_type: loadTypeById[e.exercise_id] || 'weight',
+          load_type: metaById[e.exercise_id]?.load_type || 'weight',
+          has_incline: hasIncline,
           sets_log,
         };
       });
