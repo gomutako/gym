@@ -1,176 +1,174 @@
-# Deploy self-hosted su EC2
+# Deploy su EC2 + Supabase Cloud
 
-Guida per pubblicare Gym Manager su una singola istanza EC2 con **Supabase self-hosted**,
-backend Fastify, frontend statico (PWA) e HTTPS automatico via Caddy.
+Guida per pubblicare Gym Manager con **EC2 free tier** (solo app) e **Supabase Cloud free tier**
+(database, Auth, Storage). Backend Fastify, frontend statico (PWA), HTTPS automatico via Caddy.
 
 ```
-Internet ──HTTPS──▶ Caddy ─┬─ app.tuodominio.com   ─▶ dist/ (SPA)  +  /api ─▶ Fastify :3000
-                           └─ supabase.tuodominio.com ─▶ Kong :8000 ─▶ stack Supabase (Docker)
+Internet ──HTTPS──▶ Caddy ── app.tuodominio.com ─▶ dist/ (SPA)  +  /api ─▶ Fastify :3000
+                                     │
+   browser + backend ────HTTPS───────┴────────────▶ https://<ref>.supabase.co  (Supabase Cloud)
 ```
 
-## 0. Dimensionamento istanza
+**Perché così:** l'istanza ospita solo backend e file statici, quindi basta una `t3.micro`
+(free tier AWS). Il DB pesante sta su Supabase Cloud, anch'esso free tier.
 
-Lo stack Supabase (Postgres, Auth, PostgREST, Storage, Kong, ecc.) è pesante:
+> **Ambienti:** in **locale** si usa Supabase via CLI/Docker (`npm run db:start`),
+> in **produzione** Supabase Cloud. Cambiano solo i file `.env` — il codice è identico.
+
+## 0. Dimensionamento
 
 | Istanza | RAM | Note |
 |---|---|---|
-| t3.micro | 1 GB | ❌ insufficiente |
-| t4g.small | 2 GB | ⚠️ ok solo con **swap** (passo 2) e stack essenziale |
-| **t4g.medium** | 4 GB | ✅ consigliata: stack completo senza pensieri |
+| **t3.micro** | 1 GB | ✅ free tier AWS (750 h/mese per 12 mesi), con 2 GB di swap |
+| t3.small | 2 GB | build più veloci, ma fuori free tier |
 
-`t4g` = ARM (Graviton), più economica. Disco: **almeno 20 GB** (gp3).
-Security group: apri **22 (SSH), 80, 443**. DNS: due record **A**
-(`app` e `supabase`) verso l'IP pubblico (Elastic IP consigliato).
+Disco 10 GB gp3 (il free tier include 30 GB). Security group: **22, 80, 443**.
 
-## Provisioning automatico (opzionale, sostituisce i passi 1-2)
+**Hostname senza dominio proprio.** Let's Encrypt non emette certificati per IP nudi, e
+l'app richiede HTTPS (il service worker della PWA e `crypto.randomUUID()` usato per gli
+upload funzionano solo in *secure context*). Soluzione senza acquistare nulla: **sslip.io**,
+che risolve `<IP-con-trattini>.sslip.io` al tuo IP — Caddy ottiene così un certificato valido.
 
-Se hai l'AWS CLI configurato (`aws configure`) e una key pair EC2, puoi creare
-l'istanza già pronta con un comando. `deploy/provision-ec2.sh` crea il security
-group e lancia l'istanza; `deploy/cloud-init.sh` (user-data) installa da solo al
-primo avvio swap, Docker, Node, Caddy, l'utente `gym` e clona il repo.
+```
+Elastic IP 52.30.1.2  ->  https://52-30-1-2.sslip.io
+```
+Nessun record DNS da creare. Con un dominio vero, sostituisci l'hostname nel `Caddyfile`
+e nei due `.env`, e crea un record A verso l'IP.
+
+## 1. Progetto Supabase Cloud
+
+1. Crea un progetto su [supabase.com](https://supabase.com) (piano **Free**), scegli una region vicina.
+2. **Project Settings → API**: prendi nota di
+   - **Project URL** → `https://<ref>.supabase.co`
+   - **anon public** key → frontend e backend
+   - **service_role** key → **solo backend** (bypassa la RLS, mai nel browser)
+3. **Authentication → Providers → Email**: disattiva *Confirm email*
+   (l'app fa login subito dopo la registrazione; in alternativa configura l'SMTP).
+4. **Authentication → URL Configuration**: `Site URL` = `https://app.tuodominio.com`.
+
+### Schema del database
+Le migration in `supabase/migrations/` creano tabelle, RLS, il bucket `exercise-images`
+e le policy Storage. Applicale al progetto remoto con la Supabase CLI:
 
 ```bash
-KEY_NAME=la-mia-keypair \
-REPO_URL=https://github.com/tuo-utente/gym.git \
-AWS_REGION=eu-west-1 INSTANCE_TYPE=t4g.medium \
-./deploy/provision-ec2.sh
+npx supabase login                        # una tantum
+npx supabase link --project-ref <REF>     # REF: Project Settings → General
+./deploy/db-push.sh                       # esegue supabase db push
 ```
-Attendi 2-3 minuti (bootstrap), poi **salta ai passi 3+** (Supabase, migration, ecc.).
-Provisioning e deploy restano **separati**: creare l'istanza è una-tantum, mentre
-`deploy/deploy.sh` aggiorna solo l'app.
+La CLI tiene traccia delle migration già applicate: rieseguirlo è sicuro.
 
-## 1. Pacchetti base (Ubuntu 24.04) — solo se NON usi il provisioning automatico
+## 2. Istanza EC2
+
+Con Terraform (consigliato) oppure con lo script AWS CLI:
+
+```bash
+# Terraform
+cd terraform && cp terraform.tfvars.example terraform.tfvars   # key_name, repo_url
+terraform init && terraform apply
+
+# ...oppure AWS CLI
+KEY_NAME=la-mia-keypair REPO_URL=https://github.com/tuo-utente/gym.git \
+  ./deploy/provision-ec2.sh
+```
+
+Entrambi usano `deploy/cloud-init.sh`, che al primo avvio installa **swap, Node 20, git,
+postgresql-client e Caddy**, crea l'utente `gym` e clona il repo in `/opt/gym` (2-3 min).
+Niente Docker: sul server non gira alcun database.
+
+<details>
+<summary>Installazione manuale (se non usi il provisioning automatico)</summary>
 
 ```bash
 sudo apt update && sudo apt -y upgrade
-# Docker + compose
-curl -fsSL https://get.docker.com | sh
-sudo usermod -aG docker $USER   # poi ri-login
-# Node 20 LTS
+sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile
+sudo mkswap /swapfile && sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-sudo apt -y install nodejs git
-# Caddy
+sudo apt -y install nodejs git postgresql-client
+
 sudo apt -y install debian-keyring debian-archive-keyring apt-transport-https curl
 curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
 curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
 sudo apt update && sudo apt -y install caddy
-```
 
-## 2. Swap (obbligatorio su 2 GB, utile sempre)
+sudo useradd -r -m -d /opt/gym gym
+sudo git clone <URL-del-repo> /opt/gym && sudo chown -R gym:gym /opt/gym
+```
+</details>
+
+## 3. App: backend + frontend
 
 ```bash
-sudo fallocate -l 4G /swapfile && sudo chmod 600 /swapfile
-sudo mkswap /swapfile && sudo swapon /swapfile
-echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
-```
-
-## 3. Supabase self-hosted
-
-```bash
-git clone --depth 1 https://github.com/supabase/supabase
-cd supabase/docker
-cp .env.example .env
-```
-
-**Genera le chiavi** con lo script incluso (JWT_SECRET + ANON_KEY + SERVICE_ROLE_KEY
-coerenti + password), poi incolla i valori nei file indicati dall'output:
-```bash
-node deploy/supabase-gen-keys.mjs
-```
-Nel file `.env` imposta questi **valori sicuri** (NON i default demo):
-- `POSTGRES_PASSWORD`, `JWT_SECRET`, `ANON_KEY`, `SERVICE_ROLE_KEY` — dallo script sopra
-- `DASHBOARD_USERNAME` / `DASHBOARD_PASSWORD` — accesso a Studio
-- `SITE_URL=https://app.tuodominio.com`
-- `API_EXTERNAL_URL=https://supabase.tuodominio.com`
-- `SUPABASE_PUBLIC_URL=https://supabase.tuodominio.com`
-- **Auth senza conferma email** (per mantenere il flusso attuale di registrazione):
-  `ENABLE_EMAIL_AUTOCONFIRM=true` (in alternativa configura SMTP e lascia la conferma attiva)
-
-Avvia:
-```bash
-docker compose up -d
-docker compose ps   # tutti "healthy"
-```
-
-> **Budget 2 GB:** dopo il primo avvio puoi fermare i servizi non usati dall'app
-> (`realtime`, `imgproxy`, `functions`) con `docker compose stop realtime imgproxy functions`.
-> L'app NON li usa (niente realtime, niente trasformazioni immagini, niente edge functions).
-> Su 4 GB lascia tutto attivo.
-
-## 4. Schema del database (le nostre migration)
-
-Le migration in `supabase/migrations/` creano tabelle, RLS, il bucket
-`exercise-images` e le policy Storage. Applicale con lo script incluso:
-
-```bash
-./deploy/apply-migrations.sh
-# se il container DB ha un altro nome:  DB_CONTAINER=supabase_db_xxx ./deploy/apply-migrations.sh
-```
-
-## 5. App: backend + frontend
-
-```bash
-sudo useradd -r -m -d /opt/gym gym      # utente di servizio
-sudo git clone <URL-del-tuo-repo> /opt/gym && sudo chown -R gym:gym /opt/gym
 cd /opt/gym
 npm install
 
-# Backend
+# Backend — chiavi dal dashboard Supabase Cloud
 cp backend/.env.production.example backend/.env
-#   -> inserisci ANON_KEY / SERVICE_ROLE_KEY del self-host, CORS_ORIGIN
+#   SUPABASE_URL=https://<ref>.supabase.co
+#   SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY / CORS_ORIGIN
 sudo cp deploy/gym-backend.service /etc/systemd/system/
 sudo systemctl daemon-reload && sudo systemctl enable --now gym-backend
 systemctl status gym-backend      # deve essere "active (running)"
 
 # Frontend (build di produzione)
 cp frontend/.env.production.example frontend/.env.production
-#   -> VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, VITE_API_BASE_URL
+#   VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY / VITE_API_BASE_URL
 npm run build --workspace frontend    # genera frontend/dist (con PWA)
 ```
 
-## 6. Caddy (HTTPS automatico)
+## 4. Caddy (HTTPS automatico)
 
 ```bash
 sudo cp /opt/gym/deploy/Caddyfile /etc/caddy/Caddyfile
-sudo nano /etc/caddy/Caddyfile        # metti i tuoi domini reali
+sudo nano /etc/caddy/Caddyfile        # metti il tuo dominio reale
 sudo systemctl reload caddy
 ```
 Caddy ottiene i certificati Let's Encrypt da solo al primo accesso HTTPS.
 
-## 7. Primo amministratore
+## 5. Primo amministratore
 
-Registrati dall'app (diventi `member`), poi promuoviti ad admin:
+Registrati dall'app (diventi `member`), poi promuoviti ad admin — dal **SQL Editor**
+del dashboard oppure via script:
 ```bash
-./deploy/make-admin.sh tua@email.com
+DATABASE_URL="postgresql://postgres:PWD@db.<ref>.supabase.co:5432/postgres" \
+  ./deploy/make-admin.sh tua@email.com
 ```
 
-## 8. Verifiche
+## 6. Verifiche
 - `https://app.tuodominio.com` carica l'app e su mobile compare **"Aggiungi a Home"** (PWA)
-- Login/registrazione funzionano (Auth)
+- Login/registrazione funzionano (Auth cloud)
 - Le immagini degli esercizi si caricano (Storage/bucket)
 - `https://app.tuodominio.com/api/health` → `{"status":"ok"}`
 
 ## Aggiornamenti & manutenzione
 - **Aggiornare a mano:** `cd /opt/gym && ./deploy/deploy.sh`
-- **Nuove migration:** `./deploy/apply-migrations.sh` (il deploy dell'app NON le esegue)
-- **Backup DB (manuale):** `./deploy/backup-db.sh` (dump compresso in `/opt/gym/backups`, rotazione 14 giorni)
-- **Backup DB (automatico giornaliero):**
+- **Nuove migration:** `./deploy/db-push.sh` dalla tua macchina (il deploy dell'app NON le esegue)
+- **Backup DB:** il piano Free di Supabase non include backup automatici, quindi conviene farli:
   ```bash
+  # manuale
+  DATABASE_URL="postgresql://postgres:PWD@db.<ref>.supabase.co:5432/postgres" ./deploy/backup-db.sh
+
+  # automatico giornaliero sull'EC2
+  echo 'DATABASE_URL=postgresql://postgres:PWD@db.<ref>.supabase.co:5432/postgres' \
+    | sudo tee /etc/gym-backup.env && sudo chmod 600 /etc/gym-backup.env
   sudo cp /opt/gym/deploy/gym-backup.{service,timer} /etc/systemd/system/
   sudo systemctl daemon-reload && sudo systemctl enable --now gym-backup.timer
-  systemctl list-timers gym-backup.timer   # prossima esecuzione
+  systemctl list-timers gym-backup.timer
   ```
 - **Log backend:** `journalctl -u gym-backend -f`
 
-## 9. Deploy automatico (opzionale)
+> ⚠️ **Free tier Supabase:** i progetti inattivi per ~1 settimana vengono messi in pausa
+> (si riattivano dal dashboard). Tienilo presente per ambienti dimostrativi.
+
+## 7. Deploy automatico (opzionale)
 
 Sono inclusi:
 - `deploy/deploy.sh` — script on-server: `git reset --hard`, `npm install`, build frontend, restart backend
 - `.github/workflows/deploy.yml` — GitHub Action: builda (gate) e poi esegue lo script via SSH ad ogni push su `master` (produzione, git flow)
 
-Prerequisiti sul server perché lo script/CI riavvii il backend senza password:
+Prerequisito sul server (già impostato dal cloud-init) perché il restart avvenga senza password:
 ```bash
-# consenti all'utente di deploy il solo restart del servizio senza sudo password
 echo 'gym ALL=(ALL) NOPASSWD: /bin/systemctl restart gym-backend' | sudo tee /etc/sudoers.d/gym-deploy
 ```
 

@@ -21,7 +21,13 @@ npm run dev:be         # Fastify su :3000  (health: /health)
 npm run dev:fe         # Vite su :5173
 
 npm run build          # build di produzione del frontend
+npm run db:push        # applica le migration al progetto Supabase CLOUD (produzione)
 ```
+
+**Due ambienti Supabase**: in locale gira l'istanza CLI/Docker; in **produzione** si usa
+**Supabase Cloud** (free tier) — l'EC2 ospita solo backend + Caddy. Cambiano solo i `.env`
+(`*.env.production.example`), il codice è identico. Le migration locali si applicano con
+`db:reset`, quelle remote con `db:push` (la CLI traccia da sé cosa è già applicato).
 
 Non esistono test unitari configurati: la verifica si fa con **script e2e usa-e-getta** che accedono a Supabase locale via `@supabase/supabase-js` (login utenti seed → chiamate REST al backend). Pattern usato: creare un file `.mjs` temporaneo, avviare il backend, eseguirlo, poi rimuoverlo.
 
@@ -29,7 +35,7 @@ Non esistono test unitari configurati: la verifica si fa con **script e2e usa-e-
 - **Docker** serve solo per Supabase; il codice si scrive/builda senza. La CLI Supabase (`supabase`) è una devDependency della root → invocarla con `npx supabase` o via script `db:*`.
 - La shell dell'agente **non è nel gruppo `docker`** di default: prefissare i comandi Supabase con `sg docker -c "..."`.
 - ⚠️ **Non usare `pkill`/`pgrep -f "backend/src/server.js"`**: il pattern matcha la riga di comando della shell stessa → auto-SIGTERM (exit 144, nessun output). Avviare il server con `node backend/src/server.js & SVPID=$!` e uccidere per PID.
-- Node ≥ 18 (testato su 22). Vite 8 richiede `@vitejs/plugin-vue` v6+.
+- **Node ≥ 22 obbligatorio**: `@supabase/supabase-js` usa la WebSocket nativa, assente in Node 20 → il backend va in crash-loop all'avvio. Vite 8 richiede `@vitejs/plugin-vue` v6+.
 
 ## Architettura
 

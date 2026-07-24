@@ -1,9 +1,15 @@
 # Caddyfile — reverse proxy con HTTPS automatico (Let's Encrypt).
-# Sostituisci app.esempio.com / supabase.esempio.com con i tuoi sottodomini.
-# Entrambi devono puntare (record A) all'IP pubblico dell'EC2.
+#
+# Senza dominio proprio si usa sslip.io: l'hostname <IP-con-trattini>.sslip.io
+# risolve al tuo IP, ma essendo un nome Caddy ottiene un certificato valido.
+# Sostituisci l'IP qui sotto con quello (Elastic IP) della tua istanza:
+#   52.30.1.2  ->  52-30-1-2.sslip.io
+# Con un dominio vero, basta rimpiazzare l'hostname con app.tuodominio.com.
+#
+# In produzione il DB è Supabase Cloud: il browser lo raggiunge direttamente sul
+# dominio *.supabase.co, quindi qui NON serve alcun vhost per Supabase.
 
-# --- App: frontend statico + API backend ---
-app.esempio.com {
+52-30-1-2.sslip.io {
     encode zstd gzip
 
     # Le chiamate /api/* vanno al backend Fastify
@@ -17,9 +23,4 @@ app.esempio.com {
         try_files {path} /index.html
         file_server
     }
-}
-
-# --- Supabase self-host (gateway Kong sulla 8000) ---
-supabase.esempio.com {
-    reverse_proxy 127.0.0.1:8000
 }
