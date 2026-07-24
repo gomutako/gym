@@ -27,6 +27,13 @@ const catalogById = computed(() =>
 const log = computed(() => session.value?.exercises_log || []);
 const current = computed(() => log.value[index.value] || null);
 
+function fmtDateTime(iso) {
+  if (!iso) return '';
+  return new Date(iso).toLocaleString('it-IT', {
+    weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+  });
+}
+
 // Un esercizio è "fatto" quando tutte le sue serie sono segnate
 const isExerciseDone = (ex) =>
   (ex.sets_log?.length || 0) > 0 && ex.sets_log.every((r) => r.done);
@@ -206,6 +213,10 @@ onMounted(async () => {
       <!-- Intestazione + progresso -->
       <div class="rounded-2xl bg-white p-4 shadow-sm">
         <p class="font-semibold text-gray-900">{{ session.workout_title }} · {{ session.day_name }}</p>
+        <p class="mt-0.5 text-xs text-gray-400">
+          <span class="capitalize">Iniziato {{ fmtDateTime(session.started_at) }}</span>
+          <span v-if="session.completed_at" class="capitalize"> · completato {{ fmtDateTime(session.completed_at) }}</span>
+        </p>
         <div class="mt-2 flex items-center gap-2">
           <div class="h-2 flex-1 overflow-hidden rounded-full bg-gray-100">
             <div class="h-full rounded-full bg-emerald-500 transition-all"
@@ -334,10 +345,12 @@ onMounted(async () => {
                   </div>
 
                   <button
-                    class="w-full rounded-lg border border-dashed border-gray-300 py-1.5 text-xs text-gray-500 active:scale-95"
+                    class="mt-1 flex w-full items-center justify-center gap-1.5 rounded-lg bg-brand/10 py-2 text-xs font-semibold text-brand active:scale-95"
                     @click="addSet(index)"
                   >
-                    + Aggiungi serie
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                         stroke-linecap="round" class="h-4 w-4"><path d="M12 5v14M5 12h14" /></svg>
+                    Aggiungi serie
                   </button>
                 </div>
               </div>

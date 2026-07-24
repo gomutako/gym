@@ -17,3 +17,71 @@ body {
   /* Evita il "rubber banding" fastidioso su iOS quando c'è una bottom nav */
   overscroll-behavior-y: none;
 }
+
+/* =====================================================
+   TEMA SCURO
+   L'app usa un vocabolario ristretto di utility di colore (superfici bg-white,
+   pagina bg-gray-50, testo gray-900→400, stati emerald/amber/rose/red, brand).
+   Invece di aggiungere una variante dark: a ogni classe in ogni vista, qui
+   rimappiamo quelle utility sotto html.dark: copertura completa e coerente da
+   un unico punto. La specificità (html.dark .classe) batte la singola utility.
+   ===================================================== */
+html.dark body {
+  background-color: #0f1115;
+  color: #e5e7eb;
+}
+
+/* Superfici */
+html.dark .bg-white { background-color: #1a1d23; }
+html.dark .bg-gray-50 { background-color: #0f1115; }
+html.dark .bg-gray-100 { background-color: #262a31; }
+html.dark .bg-gray-300 { background-color: #4b5563; }
+html.dark .bg-gray-400 { background-color: #6b7280; }
+
+/* Le card usano shadow-sm senza bordo: su fondo scuro serve un contorno tenue */
+html.dark .shadow-sm { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06); }
+html.dark .shadow-lg,
+html.dark .shadow-xl {
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+/* Testo */
+html.dark .text-gray-900 { color: #f3f4f6; }
+html.dark .text-gray-800 { color: #e5e7eb; }
+html.dark .text-gray-700 { color: #d1d5db; }
+html.dark .text-gray-600 { color: #b6bcc4; }
+html.dark .text-gray-500 { color: #9aa1ab; }
+html.dark .text-gray-400 { color: #7b828d; }
+html.dark .text-gray-300 { color: #565d67; }
+
+/* Bordi e divisori */
+html.dark .border-gray-300 { border-color: #3a3f47; }
+html.dark .border-gray-200 { border-color: #2f343c; }
+html.dark .border-gray-100 { border-color: #23272e; }
+html.dark .divide-gray-50 > :not([hidden]) ~ :not([hidden]) { border-color: #23272e; }
+
+/* Brand: il fondo pieno resta (testo bianco leggibile); tinta e bordo si
+   schiariscono per staccare sul fondo scuro */
+html.dark .text-brand { color: #a5a0f5; }
+html.dark .border-brand { border-color: #6b64e8; }
+html.dark .bg-brand\/10 { background-color: rgba(129, 123, 240, 0.16); }
+html.dark .ring-brand { --tw-ring-color: #6b64e8; }
+
+/* Stati — su fondo scuro: riempimenti traslucidi + testo schiarito */
+html.dark .bg-red-50 { background-color: rgba(239, 68, 68, 0.14); }
+html.dark .text-red-600 { color: #f87171; }
+html.dark .bg-rose-50 { background-color: rgba(244, 63, 94, 0.14); }
+html.dark .bg-rose-100 { background-color: rgba(244, 63, 94, 0.2); }
+html.dark .text-rose-600,
+html.dark .text-rose-500 { color: #fb7185; }
+html.dark .border-rose-200 { border-color: rgba(244, 63, 94, 0.3); }
+html.dark .bg-emerald-50 { background-color: rgba(16, 185, 129, 0.14); }
+html.dark .bg-emerald-100 { background-color: rgba(16, 185, 129, 0.2); }
+html.dark .text-emerald-600 { color: #34d399; }
+html.dark .text-emerald-700 { color: #6ee7b7; }
+html.dark .bg-amber-50 { background-color: rgba(245, 158, 11, 0.14); }
+html.dark .bg-amber-100 { background-color: rgba(245, 158, 11, 0.2); }
+html.dark .text-amber-700 { color: #fcd34d; }
+
+/* Placeholder degli input */
+html.dark ::placeholder { color: #6b727c; opacity: 1; }
