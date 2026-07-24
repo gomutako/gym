@@ -20,7 +20,7 @@
     "db:push": "./deploy/db-push.sh"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "devDependencies": {
     "supabase": "^2.109.1"

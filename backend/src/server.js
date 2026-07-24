@@ -33,8 +33,12 @@ await app.register(cors, {
   credentials: true,
 });
 
-// Health-check: utile per verificare che il server sia attivo
-app.get('/health', async () => ({ status: 'ok', service: 'gym-backend' }));
+// Health-check: utile per verificare che il server sia attivo.
+// Esposto anche sotto /api perché in produzione Caddy inoltra al backend
+// solo il prefisso /api/*, quindi /health non sarebbe raggiungibile dall'esterno.
+const health = async () => ({ status: 'ok', service: 'gym-backend' });
+app.get('/health', health);
+app.get('/api/health', health);
 
 // Plugin di auth (decorator authenticate / requireRole) + rotte API
 await app.register(authPlugin);
