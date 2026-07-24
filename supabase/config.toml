@@ -160,7 +160,12 @@ site_url = "http://127.0.0.1:3000"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = ["https://127.0.0.1:3000"]
+# In locale il frontend Vite gira su :5173: la pagina di reset password vi torna sopra.
+additional_redirect_urls = [
+  "https://127.0.0.1:3000",
+  "http://localhost:5173",
+  "http://localhost:5173/reset-password",
+]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to auth.external_url.
@@ -233,15 +238,35 @@ otp_length = 6
 # Number of seconds before the email OTP expires (defaults to 1 hour).
 otp_expiry = 3600
 
-# Use a production-ready SMTP server
+# Template email personalizzati (italiano). In locale li usa Mailpit;
+# in produzione vanno incollati nel dashboard Supabase Cloud.
+[auth.email.template.recovery]
+subject = "Reimposta la tua password — Gym Manager"
+content_path = "./supabase/templates/recovery.html"
+
+[auth.email.template.confirmation]
+subject = "Conferma la tua email — Gym Manager"
+content_path = "./supabase/templates/confirmation.html"
+
+[auth.email.template.email_change]
+subject = "Conferma il cambio email — Gym Manager"
+content_path = "./supabase/templates/email_change.html"
+
+# SMTP di PRODUZIONE.
+# In locale NON serve: gli invii finiscono in Mailpit (:54324).
+# In produzione l'SMTP si configura nel dashboard Supabase Cloud
+# (Authentication → SMTP Settings), non da questo file.
+# NB: NON serve un mailserver sull'EC2 — Supabase si collega a un relay gestito.
+# Esempio con Amazon SES (AWS-native):
 # [auth.email.smtp]
 # enabled = true
-# host = "smtp.sendgrid.net"
+# host = "email-smtp.eu-west-1.amazonaws.com"
 # port = 587
-# user = "apikey"
-# pass = "env(SENDGRID_API_KEY)"
-# admin_email = "admin@email.com"
-# sender_name = "Admin"
+# user = "env(SES_SMTP_USER)"
+# pass = "env(SES_SMTP_PASS)"
+# admin_email = "noreply@tuodominio.com"
+# sender_name = "Gym Manager"
+# Alternativa Resend: host = "smtp.resend.com", user = "resend", pass = "env(RESEND_API_KEY)"
 
 # Uncomment to customize email template
 # [auth.email.template.invite]
