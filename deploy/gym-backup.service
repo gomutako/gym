@@ -1,11 +1,15 @@
 # Backup DB one-shot (lanciato dal timer). Copia in /etc/systemd/system/
+#
+# Prima crea /etc/gym-backup.env (chmod 600, root) con la connection string:
+#   DATABASE_URL=postgresql://postgres:PWD@db.<ref>.supabase.co:5432/postgres
 [Unit]
 Description=Backup DB Gym Manager
-After=docker.service
-Requires=docker.service
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=oneshot
 User=gym
 Group=gym
+EnvironmentFile=/etc/gym-backup.env
 ExecStart=/opt/gym/deploy/backup-db.sh

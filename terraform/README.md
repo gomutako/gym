@@ -1,7 +1,11 @@
 # Terraform — infrastruttura EC2
 
-Provisioning riproducibile: security group (22/80/443), istanza EC2 (Ubuntu 24.04 ARM,
-bootstrap via `deploy/cloud-init.sh`), Elastic IP e — opzionale — record DNS Route53.
+Provisioning riproducibile: security group (22/80/443), istanza EC2 (Ubuntu 24.04 x86_64,
+`t3.micro` free tier, bootstrap via `deploy/cloud-init.sh`), Elastic IP e — opzionale —
+record DNS Route53 per l'app.
+
+L'istanza ospita **solo backend + Caddy**: il database è su **Supabase Cloud**, quindi
+niente Docker né stack Supabase sul server.
 
 ## Uso
 ```bash
@@ -12,7 +16,7 @@ terraform plan      # anteprima
 terraform apply     # crea l'infrastruttura
 ```
 Al termine ottieni `public_ip` e il comando SSH. Attendi 2-3 minuti che il cloud-init
-finisca, poi prosegui con `DEPLOY.md` dal §3 (Supabase self-host).
+finisca, poi prosegui con `DEPLOY.md` dal §3 (app: backend + frontend).
 
 ## Distruggere tutto
 ```bash

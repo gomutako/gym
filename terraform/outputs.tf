@@ -14,6 +14,6 @@ output "ssh" {
 }
 
 output "dns_hint" {
-  description = "Se non usi Route53, punta questi record A all'IP"
-  value       = var.create_dns ? "Record Route53 creati" : "Crea manualmente: ${var.app_subdomain}.<dominio> e ${var.supabase_subdomain}.<dominio> -> ${aws_eip.gym.public_ip}"
+  description = "Se non usi Route53, punta questo record A all'IP"
+  value       = var.create_dns ? "Record Route53 creato" : "Crea manualmente: ${var.app_subdomain}.<dominio> -> ${aws_eip.gym.public_ip}"
 }

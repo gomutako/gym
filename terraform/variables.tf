@@ -5,15 +5,15 @@ variable "aws_region" {
 }
 
 variable "instance_type" {
-  description = "Tipo istanza. t4g.medium=4GB (consigliato self-host Supabase), t4g.small=2GB+swap"
+  description = "Tipo istanza. t3.micro rientra nel free tier AWS (750h/mese per 12 mesi). L'istanza ospita solo backend + Caddy: il DB è su Supabase Cloud."
   type        = string
-  default     = "t4g.medium"
+  default     = "t3.micro"
 }
 
 variable "volume_size" {
-  description = "Dimensione disco root (GB, gp3)"
+  description = "Dimensione disco root (GB, gp3). Il free tier AWS include 30 GB EBS."
   type        = number
-  default     = 20
+  default     = 10
 }
 
 variable "key_name" {
@@ -52,13 +52,7 @@ variable "domain" {
 }
 
 variable "app_subdomain" {
-  description = "Sottodominio dell'app"
+  description = "Sottodominio dell'app (unico record necessario: il DB è su Supabase Cloud)"
   type        = string
   default     = "app"
-}
-
-variable "supabase_subdomain" {
-  description = "Sottodominio di Supabase"
-  type        = string
-  default     = "supabase"
 }

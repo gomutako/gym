@@ -1,8 +1,8 @@
 # Caddyfile — reverse proxy con HTTPS automatico (Let's Encrypt).
-# Sostituisci app.esempio.com / supabase.esempio.com con i tuoi sottodomini.
-# Entrambi devono puntare (record A) all'IP pubblico dell'EC2.
+# Sostituisci app.esempio.com con il tuo sottodominio (record A -> IP dell'EC2).
+# In produzione il DB è Supabase Cloud: il browser lo raggiunge direttamente sul
+# dominio *.supabase.co, quindi qui NON serve alcun vhost per Supabase.
 
-# --- App: frontend statico + API backend ---
 app.esempio.com {
     encode zstd gzip
 
@@ -17,9 +17,4 @@ app.esempio.com {
         try_files {path} /index.html
         file_server
     }
-}
-
-# --- Supabase self-host (gateway Kong sulla 8000) ---
-supabase.esempio.com {
-    reverse_proxy 127.0.0.1:8000
 }

@@ -21,7 +21,13 @@ npm run dev:be         # Fastify su :3000  (health: /health)
 npm run dev:fe         # Vite su :5173
 
 npm run build          # build di produzione del frontend
+npm run db:push        # applica le migration al progetto Supabase CLOUD (produzione)
 ```
+
+**Due ambienti Supabase**: in locale gira l'istanza CLI/Docker; in **produzione** si usa
+**Supabase Cloud** (free tier) — l'EC2 ospita solo backend + Caddy. Cambiano solo i `.env`
+(`*.env.production.example`), il codice è identico. Le migration locali si applicano con
+`db:reset`, quelle remote con `db:push` (la CLI traccia da sé cosa è già applicato).
 
 Non esistono test unitari configurati: la verifica si fa con **script e2e usa-e-getta** che accedono a Supabase locale via `@supabase/supabase-js` (login utenti seed → chiamate REST al backend). Pattern usato: creare un file `.mjs` temporaneo, avviare il backend, eseguirlo, poi rimuoverlo.
 

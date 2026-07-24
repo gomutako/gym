@@ -13,8 +13,8 @@
 set -euo pipefail
 
 : "${AWS_REGION:=eu-west-1}"
-: "${INSTANCE_TYPE:=t4g.medium}"   # 4 GB (self-host Supabase comodo). t4g.small=2GB+swap
-: "${VOLUME_SIZE:=20}"
+: "${INSTANCE_TYPE:=t3.micro}"     # free tier AWS. L'istanza ospita solo backend + Caddy
+: "${VOLUME_SIZE:=10}"
 : "${SG_NAME:=gym-sg}"
 : "${TAG_NAME:=gym-manager}"
 : "${KEY_NAME:?Imposta KEY_NAME = nome di una key pair EC2 esistente}"
@@ -23,9 +23,9 @@ set -euo pipefail
 command -v aws >/dev/null || { echo "❌ AWS CLI non installato/configurato"; exit 1; }
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-echo "▶ Ultima AMI Ubuntu 24.04 ARM64 in $AWS_REGION…"
+echo "▶ Ultima AMI Ubuntu 24.04 x86_64 in $AWS_REGION…"
 AMI=$(aws ssm get-parameters --region "$AWS_REGION" \
-  --names /aws/service/canonical/ubuntu/server/24.04/stable/current/arm64/hvm/ebs-gp3/ami-id \
+  --names /aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id \
   --query 'Parameters[0].Value' --output text)
 echo "  AMI = $AMI"
 
@@ -69,9 +69,9 @@ cat <<EOF
    IP:  $IP
    SSH: ssh -i <tua-chiave.pem> ubuntu@$IP
 
-Il cloud-init (2-3 min) installa Docker/Node/Caddy, crea l'utente 'gym' e clona il repo in /opt/gym.
+Il cloud-init (2-3 min) installa Node/Caddy, crea l'utente 'gym' e clona il repo in /opt/gym.
 Prossimi passi:
   1) (consigliato) alloca un Elastic IP e associalo all'istanza, così l'IP non cambia
-  2) punta i record DNS 'app' e 'supabase' a $IP
-  3) segui DEPLOY.md dal §3 (Supabase self-host) in poi
+  2) punta il record DNS 'app' a $IP
+  3) segui DEPLOY.md (progetto Supabase Cloud + .env + Caddy + servizio backend)
 EOF

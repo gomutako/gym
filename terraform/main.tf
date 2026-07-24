@@ -1,6 +1,7 @@
-# AMI Ubuntu 24.04 ARM64 più recente (parametro pubblico Canonical via SSM)
+# AMI Ubuntu 24.04 x86_64 più recente (parametro pubblico Canonical via SSM).
+# x86_64 perché il free tier AWS copre t2.micro/t3.micro (non le ARM t4g).
 data "aws_ssm_parameter" "ubuntu" {
-  name = "/aws/service/canonical/ubuntu/server/24.04/stable/current/arm64/hvm/ebs-gp3/ami-id"
+  name = "/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id"
 }
 
 # Security group: SSH ristretto, HTTP/HTTPS aperti
@@ -68,20 +69,12 @@ resource "aws_eip" "gym" {
   tags     = { Name = "gym-manager" }
 }
 
-# Record DNS opzionali (app + supabase) verso l'Elastic IP
+# Record DNS opzionale per l'app verso l'Elastic IP.
+# Non serve un record per Supabase: in produzione è il servizio cloud (*.supabase.co).
 resource "aws_route53_record" "app" {
   count   = var.create_dns ? 1 : 0
   zone_id = var.route53_zone_id
   name    = "${var.app_subdomain}.${var.domain}"
-  type    = "A"
-  ttl     = 300
-  records = [aws_eip.gym.public_ip]
-}
-
-resource "aws_route53_record" "supabase" {
-  count   = var.create_dns ? 1 : 0
-  zone_id = var.route53_zone_id
-  name    = "${var.supabase_subdomain}.${var.domain}"
   type    = "A"
   ttl     = 300
   records = [aws_eip.gym.public_ip]
