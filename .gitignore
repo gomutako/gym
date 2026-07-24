@@ -22,7 +22,12 @@ npm-debug.log*
 terraform.tfvars
 *.tfplan
 
+# Supabase CLI (cache locale, non versionare)
+supabase/.temp/
+
 # Editor / OS
 .DS_Store
 .vscode/
 .idea/
+# Artefatti "mark of the web" di WSL/Windows
+*:Zone.Identifier
