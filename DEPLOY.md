@@ -23,7 +23,17 @@ Internet ──HTTPS──▶ Caddy ── app.tuodominio.com ─▶ dist/ (SPA)
 | t3.small | 2 GB | build più veloci, ma fuori free tier |
 
 Disco 10 GB gp3 (il free tier include 30 GB). Security group: **22, 80, 443**.
-DNS: **un solo record A** (`app`) verso l'IP pubblico (Elastic IP consigliato).
+
+**Hostname senza dominio proprio.** Let's Encrypt non emette certificati per IP nudi, e
+l'app richiede HTTPS (il service worker della PWA e `crypto.randomUUID()` usato per gli
+upload funzionano solo in *secure context*). Soluzione senza acquistare nulla: **sslip.io**,
+che risolve `<IP-con-trattini>.sslip.io` al tuo IP — Caddy ottiene così un certificato valido.
+
+```
+Elastic IP 52.30.1.2  ->  https://52-30-1-2.sslip.io
+```
+Nessun record DNS da creare. Con un dominio vero, sostituisci l'hostname nel `Caddyfile`
+e nei due `.env`, e crea un record A verso l'IP.
 
 ## 1. Progetto Supabase Cloud
 
