@@ -4,6 +4,8 @@
 //                                          (il member solo le proprie; trainer/admin qualsiasi)
 //   POST  /api/workouts                    crea scheda (trainer/admin)
 //   PATCH /api/workouts/:id                modifica scheda (trainer/admin)
+//   PATCH /api/workouts/:id/active         imposta "in uso" (member/trainer/admin)
+//   PATCH /api/workouts/:id/archived       archivia/ripristina (member/trainer/admin)
 // =====================================================
 import { supabaseAdmin } from '../lib/supabase.js';
 
@@ -112,6 +114,105 @@ export default async function workoutsRoutes(fastify) {
 
       if (error) return reply.code(400).send({ error: error.message });
       if (!data) return reply.code(404).send({ error: 'Scheda non trovata' });
+      return data;
+    }
+  );
+
+  // --- Attiva/disattiva scheda (member sulle proprie, trainer/admin qualsiasi) ---
+  // Esclusiva per member: attivarne una disattiva le altre dello stesso member.
+  fastify.patch(
+    '/api/workouts/:id/active',
+    {
+      preHandler: [authenticate],
+      schema: {
+        body: {
+          type: 'object',
+          required: ['is_active'],
+          additionalProperties: false,
+          properties: { is_active: { type: 'boolean' } },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+      const { is_active } = request.body;
+
+      const { data: w, error: loadErr } = await supabaseAdmin
+        .from('workouts')
+        .select('id, member_id')
+        .eq('id', id)
+        .single();
+      if (loadErr || !w) return reply.code(404).send({ error: 'Scheda non trovata' });
+
+      // Il member può agire solo sulle proprie schede
+      if (request.userRole === 'member' && w.member_id !== request.user.id) {
+        return reply.code(403).send({ error: 'Accesso negato' });
+      }
+
+      // Esclusività: prima libero le altre del member, poi imposto questa
+      // (l'indice unico parziale garantisce al più una attiva per member).
+      if (is_active) {
+        const { error: clearErr } = await supabaseAdmin
+          .from('workouts')
+          .update({ is_active: false })
+          .eq('member_id', w.member_id)
+          .neq('id', id);
+        if (clearErr) return reply.code(400).send({ error: clearErr.message });
+      }
+
+      // Mettere in uso una scheda la riporta anche fuori dall'archivio
+      const { data, error } = await supabaseAdmin
+        .from('workouts')
+        .update(is_active ? { is_active: true, archived: false } : { is_active: false })
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) return reply.code(400).send({ error: error.message });
+      return data;
+    }
+  );
+
+  // --- Archivia/ripristina scheda (member sulle proprie, trainer/admin qualsiasi) ---
+  // Archiviare la nasconde dalle combobox di selezione; una scheda archiviata
+  // non può restare "in uso" (invariante).
+  fastify.patch(
+    '/api/workouts/:id/archived',
+    {
+      preHandler: [authenticate],
+      schema: {
+        body: {
+          type: 'object',
+          required: ['archived'],
+          additionalProperties: false,
+          properties: { archived: { type: 'boolean' } },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+      const { archived } = request.body;
+
+      const { data: w, error: loadErr } = await supabaseAdmin
+        .from('workouts')
+        .select('id, member_id')
+        .eq('id', id)
+        .single();
+      if (loadErr || !w) return reply.code(404).send({ error: 'Scheda non trovata' });
+
+      if (request.userRole === 'member' && w.member_id !== request.user.id) {
+        return reply.code(403).send({ error: 'Accesso negato' });
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from('workouts')
+        // archiviare azzera "in uso" (invariante in uso ⇒ non archiviata)
+        .update(archived ? { archived: true, is_active: false } : { archived: false })
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) return reply.code(400).send({ error: error.message });
       return data;
     }
   );

@@ -51,15 +51,17 @@ const exercisesOnly = process.argv.includes('--exercises-only') || process.argv.
 
 const PASSWORD = 'password123';
 
-// Crea (o recupera) un utente con ruolo, restituisce l'id
-async function ensureUser(email, role, full_name) {
+// Crea (o recupera) un utente con ruolo, restituisce l'id.
+// Nome e cognome finiscono nei metadati: il trigger handle_new_user crea la
+// riga profiles con first_name/last_name (full_name è generata).
+async function ensureUser(email, role, first_name, last_name) {
   const { data: list } = await admin.auth.admin.listUsers();
   const existing = list.users.find((u) => u.email === email);
   if (existing) return existing.id;
 
   const { data, error } = await admin.auth.admin.createUser({
     email, password: PASSWORD, email_confirm: true,
-    user_metadata: { role, full_name },
+    user_metadata: { role, first_name, last_name },
   });
   if (error) throw error;
   return data.user.id;
@@ -69,17 +71,22 @@ async function ensureUser(email, role, full_name) {
 let trainerId = null;
 let memberId = null;
 if (!exercisesOnly) {
-  await ensureUser('admin@gym.local', 'admin', 'Alice Admin');
-  trainerId = await ensureUser('trainer@gym.local', 'trainer', 'Toni Trainer');
-  memberId = await ensureUser('member@gym.local', 'member', 'Marco Member');
+  await ensureUser('admin@gym.local', 'admin', 'Alice', 'Admin');
+  trainerId = await ensureUser('trainer@gym.local', 'trainer', 'Toni', 'Trainer');
+  memberId = await ensureUser('member@gym.local', 'member', 'Marco', 'Member');
 
-  // Abbonamento attivo per il member (+30 giorni)
-  const end = new Date();
-  end.setDate(end.getDate() + 30);
-  await admin
-    .from('profiles')
-    .update({ subscription_end_date: end.toISOString().slice(0, 10) })
-    .eq('id', memberId);
+  // Abbonamento: storico di periodi. Uno passato (scaduto) + uno attivo
+  // (+30 giorni). profiles.subscription_end_date è mantenuta dal trigger.
+  const day = (offset) => {
+    const d = new Date();
+    d.setDate(d.getDate() + offset);
+    return d.toISOString().slice(0, 10);
+  };
+  await admin.from('subscriptions').delete().eq('member_id', memberId);
+  await admin.from('subscriptions').insert([
+    { member_id: memberId, start_date: day(-120), end_date: day(-30) }, // scaduto
+    { member_id: memberId, start_date: day(-15), end_date: day(30) },   // attivo
+  ]);
 
   // Corsi (reset di quelli demo per rendere lo script rieseguibile senza duplicati)
   await admin.from('classes').delete().eq('trainer_id', trainerId);
