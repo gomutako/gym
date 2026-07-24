@@ -13,6 +13,14 @@ const routes = [
     meta: { public: true },
   },
   {
+    // Reset password: vi si arriva dal link nell'email di recupero (Supabase
+    // stabilisce una sessione di recovery leggendo il token dall'URL).
+    path: '/reset-password',
+    name: 'reset-password',
+    component: () => import('@/views/ResetPasswordView.vue'),
+    meta: { public: true },
+  },
+  {
     // Area protetta: usa il layout con bottom navigation
     path: '/',
     component: () => import('@/layouts/AppLayout.vue'),

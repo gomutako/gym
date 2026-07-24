@@ -44,7 +44,50 @@ e nei due `.env`, e crea un record A verso l'IP.
    - **service_role** key → **solo backend** (bypassa la RLS, mai nel browser)
 3. **Authentication → Providers → Email**: disattiva *Confirm email*
    (l'app fa login subito dopo la registrazione; in alternativa configura l'SMTP).
-4. **Authentication → URL Configuration**: `Site URL` = `https://app.tuodominio.com`.
+4. **Authentication → URL Configuration**:
+   - `Site URL` = `https://app.tuodominio.com`
+   - **Redirect URLs**: aggiungi `https://app.tuodominio.com/reset-password`
+     (senza questo il link di recupero password viene rifiutato).
+
+### Recupero password + SMTP (produzione)
+
+Il recupero password (Supabase `resetPasswordForEmail` → pagina `/reset-password`)
+**richiede l'invio email**. In locale gli invii finiscono in Mailpit (`:54324`),
+in produzione serve un SMTP vero: quello di default di Supabase è fortemente
+rate-limitato e finisce in spam.
+
+Le email le invia **Supabase Cloud**, non l'EC2: basta puntargli un relay SMTP.
+⚠️ **Non** installare un mailserver sull'EC2 (porta 25 bloccata da AWS, IP in blocklist,
+deliverability pessima). Usa un servizio gestito.
+
+Provider: essendo su AWS, **Amazon SES** è la scelta naturale (vedi sotto). In alternativa
+**Resend** (free tier ampio, setup più rapido). Cambiano solo host/credenziali.
+
+**Opzione A — Amazon SES (AWS-native):**
+1. **SES → Verified identities**: verifica il dominio (record **DKIM**/SPF nel DNS; con Route 53 è automatico).
+2. Esci dalla **sandbox**: *Request production access* (altrimenti invii solo a indirizzi verificati).
+3. **SES → SMTP settings → Create SMTP credentials** (username/password dedicati, diversi dalle chiavi AWS).
+4. In Supabase (passo 3 sotto): Host `email-smtp.<regione>.amazonaws.com` · Port `587` · le credenziali SMTP SES.
+
+**Opzione B — Resend:**
+
+1. Crea un account su [resend.com](https://resend.com) e **verifica il dominio**
+   (aggiungi i record **SPF** e **DKIM** che Resend indica al tuo DNS — 10 min).
+   Senza dominio verificato le email vanno in spam o non partono.
+2. Genera una **API key**.
+3. Supabase Cloud → **Project Settings → Authentication → SMTP Settings** → *Enable custom SMTP*:
+   - Host: `smtp.resend.com` · Port: `587`
+   - Username: `resend` · Password: la **API key**
+   - Sender email: `noreply@tuodominio.com` (dominio verificato) · Sender name: `Gym Manager`
+4. **Authentication → Email Templates**: incolla i template italiani da `supabase/templates/`
+   (subject nei rispettivi blocchi di `supabase/config.toml`):
+   - *Reset Password* → [`recovery.html`](supabase/templates/recovery.html)
+   - *Confirm signup* → [`confirmation.html`](supabase/templates/confirmation.html) (serve solo se attivi la conferma email)
+   - *Change email address* → [`email_change.html`](supabase/templates/email_change.html)
+5. (Opzionale) alza il rate limit email in **Authentication → Rate Limits**.
+
+> Le credenziali SMTP vivono **nel dashboard Supabase Cloud**, non nel repo:
+> non finiscono in nessun `.env` dell'app. Il reset non tocca il backend Fastify.
 
 ### Schema del database
 Le migration in `supabase/migrations/` creano tabelle, RLS, il bucket `exercise-images`

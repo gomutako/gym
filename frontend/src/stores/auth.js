@@ -5,6 +5,7 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/api';
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(null); // utente Supabase (auth)
@@ -14,6 +15,10 @@ export const useAuthStore = defineStore('auth', () => {
   const isLoggedIn = computed(() => !!user.value);
   const role = computed(() => profile.value?.role ?? null);
   const fullName = computed(() => profile.value?.full_name || user.value?.email || '');
+  const firstName = computed(() => profile.value?.first_name || '');
+  const lastName = computed(() => profile.value?.last_name || '');
+  const phone = computed(() => profile.value?.phone || '');
+  const avatarPath = computed(() => profile.value?.avatar_path || null);
 
   // Abbonamento attivo se la data di fine è oggi o futura
   const isSubscriptionActive = computed(() => {
@@ -60,16 +65,42 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   // In locale la conferma email è disabilitata: la registrazione crea già la sessione.
-  async function register(email, password, fullNameValue) {
+  async function register(email, password, firstNameValue, lastNameValue) {
     const { error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { full_name: fullNameValue } }, // finisce in raw_user_meta_data -> trigger
+      // finiscono in raw_user_meta_data -> trigger handle_new_user
+      options: { data: { first_name: firstNameValue, last_name: lastNameValue } },
     });
     if (error) throw error;
     const { data } = await supabase.auth.getSession();
     user.value = data.session?.user ?? null;
     await fetchProfile();
+  }
+
+  // Aggiorna il PROPRIO profilo (nome/telefono/avatar) via backend e
+  // riallinea lo stato locale con la riga restituita.
+  async function updateProfile(fields) {
+    const updated = await api.patch('/api/profile', fields);
+    profile.value = updated;
+    return updated;
+  }
+
+  // Invia l'email di recupero password. Il link riporta l'utente su
+  // /reset-password con una sessione di recovery. Non fa errore se l'email
+  // non esiste (evita l'enumerazione degli account).
+  async function sendPasswordReset(email) {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    if (error) throw error;
+  }
+
+  // Imposta una nuova password per l'utente della sessione corrente
+  // (usata dalla vista di reset dopo il link email).
+  async function updatePassword(newPassword) {
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) throw error;
   }
 
   async function logout() {
@@ -80,7 +111,8 @@ export const useAuthStore = defineStore('auth', () => {
 
   return {
     user, profile, loading,
-    isLoggedIn, role, fullName, isSubscriptionActive,
-    init, fetchProfile, login, register, logout,
+    isLoggedIn, role, fullName, firstName, lastName, phone, avatarPath, isSubscriptionActive,
+    init, fetchProfile, login, register, logout, updateProfile,
+    sendPasswordReset, updatePassword,
   };
 });

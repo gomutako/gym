@@ -54,10 +54,12 @@ export default async function membersRoutes(fastify) {
       schema: {
         body: {
           type: 'object',
+          // L'abbonamento non si imposta più qui: è gestito dai periodi
+          // (/api/subscriptions) e profiles.subscription_end_date è derivata.
           properties: {
-            subscription_end_date: { type: 'string', format: 'date', nullable: true },
             role: { type: 'string', enum: ['admin', 'trainer', 'member'] },
-            full_name: { type: 'string' },
+            first_name: { type: 'string' },
+            last_name: { type: ['string', 'null'] },
             email: { type: 'string', format: 'email' },
           },
         },

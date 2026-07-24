@@ -3,6 +3,7 @@
 // L'immagine è condivisa per tipo (caricata su Storage dal client).
 //   GET    /api/exercises        catalogo (tutti gli autenticati)
 //   POST   /api/exercises        crea voce catalogo (trainer/admin)
+//   PATCH  /api/exercises/:id    modifica voce catalogo (trainer/admin)
 //   DELETE /api/exercises/:id    elimina voce catalogo (trainer/admin)
 // =====================================================
 import { supabaseAdmin } from '../lib/supabase.js';
@@ -61,6 +62,56 @@ export default async function exercisesRoutes(fastify) {
         return reply.code(400).send({ error: error.message });
       }
       return reply.code(201).send(data);
+    }
+  );
+
+  // --- Modifica voce catalogo (trainer/admin) ---
+  // Campi opzionali a null per svuotarli; image_path nuovo = immagine già caricata dal client.
+  fastify.patch(
+    '/api/exercises/:id',
+    {
+      preHandler: [authenticate, requireRole('trainer', 'admin')],
+      schema: {
+        body: {
+          type: 'object',
+          minProperties: 1,
+          additionalProperties: false,
+          properties: {
+            name: { type: 'string', minLength: 1 },
+            muscle_group: { type: ['string', 'null'] },
+            description: { type: ['string', 'null'] },
+            load_type: { type: 'string', enum: ['weight', 'level'] },
+            has_incline: { type: 'boolean' },
+            video_url: { type: ['string', 'null'] },
+            image_path: { type: ['string', 'null'] },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      // Fastify rimuove i campi non previsti dopo il check di minProperties:
+      // un body fatto solo di campi ignoti arriva qui vuoto.
+      if (!Object.keys(request.body).length) {
+        return reply.code(400).send({ error: 'Nessun campo da aggiornare' });
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from('exercises')
+        .update(request.body)
+        .eq('id', request.params.id)
+        .select()
+        .single();
+
+      if (error) {
+        if (error.code === '23505') {
+          return reply.code(409).send({ error: 'Esiste già un esercizio con questo nome' });
+        }
+        if (error.code === 'PGRST116') {
+          return reply.code(404).send({ error: 'Esercizio non trovato' });
+        }
+        return reply.code(400).send({ error: error.message });
+      }
+      return data;
     }
   );
 

@@ -14,6 +14,8 @@ import membersRoutes from './routes/members.js';
 import reportsRoutes from './routes/reports.js';
 import exercisesRoutes from './routes/exercises.js';
 import sessionsRoutes from './routes/sessions.js';
+import profileRoutes from './routes/profile.js';
+import subscriptionsRoutes from './routes/subscriptions.js';
 
 const app = Fastify({
   logger: {
@@ -49,6 +51,8 @@ await app.register(membersRoutes);
 await app.register(reportsRoutes);
 await app.register(exercisesRoutes);
 await app.register(sessionsRoutes);
+await app.register(profileRoutes);
+await app.register(subscriptionsRoutes);
 
 // --- Avvio del server ---
 const PORT = Number(process.env.PORT) || 3000;
