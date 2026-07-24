@@ -46,7 +46,7 @@ export default async function membersRoutes(fastify) {
     }
   );
 
-  // --- Aggiorna abbonamento/ruolo di un utente: solo admin (utile in Fase Admin) ---
+  // --- Aggiorna abbonamento/ruolo/email di un utente: solo admin ---
   fastify.patch(
     '/api/members/:id',
     {
@@ -58,21 +58,39 @@ export default async function membersRoutes(fastify) {
             subscription_end_date: { type: 'string', format: 'date', nullable: true },
             role: { type: 'string', enum: ['admin', 'trainer', 'member'] },
             full_name: { type: 'string' },
+            email: { type: 'string', format: 'email' },
           },
         },
       },
     },
     async (request, reply) => {
-      const { data, error } = await supabaseAdmin
-        .from('profiles')
-        .update(request.body)
-        .eq('id', request.params.id)
-        .select()
-        .single();
+      // L'email vive in auth.users, non in profiles: va cambiata con l'API Auth admin.
+      // updateUserById imposta l'email direttamente (senza mail di conferma): scelta
+      // voluta per la gestione lato admin.
+      const { email, ...profileFields } = request.body;
+
+      if (email !== undefined) {
+        const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(
+          request.params.id,
+          { email, email_confirm: true }
+        );
+        if (authError) return reply.code(400).send({ error: authError.message });
+      }
+
+      // Aggiorna profiles solo se ci sono campi suoi; altrimenti rileggi la riga.
+      const table = supabaseAdmin.from('profiles').select().eq('id', request.params.id);
+      const { data, error } = Object.keys(profileFields).length > 0
+        ? await supabaseAdmin
+            .from('profiles')
+            .update(profileFields)
+            .eq('id', request.params.id)
+            .select()
+            .single()
+        : await table.single();
 
       if (error) return reply.code(400).send({ error: error.message });
       if (!data) return reply.code(404).send({ error: 'Utente non trovato' });
-      return data;
+      return { ...data, ...(email !== undefined ? { email } : {}) };
     }
   );
 }

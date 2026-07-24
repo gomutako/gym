@@ -13,7 +13,9 @@ const roleLabel = { admin: 'Admin', trainer: 'Trainer', member: 'Member' };
 async function load() {
   loading.value = true;
   try {
-    users.value = await api.get('/api/users');
+    const list = await api.get('/api/users');
+    // _origEmail: per inviare l'email solo se davvero cambiata (evita auth call inutili)
+    users.value = list.map((u) => ({ ...u, _origEmail: u.email }));
   } catch (e) {
     error.value = e.message;
   } finally {
@@ -25,10 +27,14 @@ async function save(u) {
   error.value = '';
   savingId.value = u.id;
   try {
-    await api.patch(`/api/members/${u.id}`, {
+    const payload = {
       role: u.role,
       subscription_end_date: u.subscription_end_date || null,
-    });
+    };
+    if (u.email && u.email !== u._origEmail) payload.email = u.email.trim();
+
+    await api.patch(`/api/members/${u.id}`, payload);
+    u._origEmail = u.email;
     u._saved = true;
     setTimeout(() => (u._saved = false), 1500);
   } catch (e) {
@@ -50,7 +56,15 @@ onMounted(load);
       <li v-for="u in users" :key="u.id" class="rounded-2xl bg-white p-4 shadow-sm">
         <div class="mb-3">
           <p class="font-semibold text-gray-900">{{ u.full_name || 'Senza nome' }}</p>
-          <p class="text-sm text-gray-500">{{ u.email }}</p>
+        </div>
+
+        <div class="mb-3">
+          <label class="mb-1 block text-xs font-medium text-gray-500">Email</label>
+          <input
+            v-model="u.email"
+            type="email"
+            class="w-full rounded-lg border border-gray-300 px-2 py-2 text-sm focus:border-brand focus:outline-none"
+          />
         </div>
 
         <div class="grid grid-cols-2 gap-3">
