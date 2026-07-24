@@ -6,6 +6,26 @@ versionamento [SemVer](https://semver.org/lang/it/).
 
 ## [Non rilasciato]
 
+## [1.0.1] — 2026-07-24
+
+Prima messa in produzione (EC2 + Supabase Cloud) e correzioni emerse dal deploy reale.
+
+### Modificato
+- La produzione usa **Supabase Cloud** (free tier) invece del self-host: l'istanza EC2
+  ospita solo backend e frontend, quindi basta una `t3.micro`. In locale resta Supabase CLI.
+- Migration remote applicate con la Supabase CLI (`npm run db:push`)
+- Senza dominio proprio si usa **sslip.io** come hostname, così Caddy ottiene un
+  certificato Let's Encrypt valido (l'app richiede HTTPS per PWA e upload)
+- **Node 22** è ora il minimo richiesto (CI, `engines`, provisioning)
+
+### Corretto
+- `@supabase/supabase-js` usa la WebSocket nativa: con Node 20 il backend andava in
+  crash-loop all'avvio
+- Il `git clone` del cloud-init falliva perché `useradd -m` aveva già popolato `/opt/gym`
+  con i file skeleton (ora `git init` + `fetch`)
+- `/opt/gym` a permessi 750 impediva a Caddy di leggere `frontend/dist` (ora 755)
+- Health-check esposto anche su `/api/health`, raggiungibile dall'esterno
+
 ## [1.0.0] — 2026-07-24
 
 Prima release di **Gym Manager**, web app mobile-first per la gestione di una palestra.
@@ -42,5 +62,6 @@ Prima release di **Gym Manager**, web app mobile-first per la gestione di una pa
 - CI/CD con GitHub Actions (CI su `develop`/PR, deploy su `master`)
 - Backup giornaliero del database con systemd timer
 
-[Non rilasciato]: https://github.com/gomutako/gym/compare/1.0.0...develop
+[Non rilasciato]: https://github.com/gomutako/gym/compare/1.0.1...develop
+[1.0.1]: https://github.com/gomutako/gym/compare/1.0.0...1.0.1
 [1.0.0]: https://github.com/gomutako/gym/releases/tag/1.0.0
