@@ -10,7 +10,7 @@ const loading = ref(true);
 const saving = ref(false);
 const error = ref('');
 
-const form = ref({ name: '', muscle_group: '', description: '', load_type: 'weight', video_url: '' });
+const form = ref({ name: '', muscle_group: '', description: '', load_type: 'weight', has_incline: false, video_url: '' });
 const file = ref(null);
 const preview = ref(null);
 
@@ -44,12 +44,13 @@ async function create() {
       muscle_group: form.value.muscle_group || undefined,
       description: form.value.description || undefined,
       load_type: form.value.load_type,
+      has_incline: form.value.has_incline,
       video_url: form.value.video_url || undefined,
       image_path: image_path || undefined,
     });
 
     // reset form
-    form.value = { name: '', muscle_group: '', description: '', load_type: 'weight', video_url: '' };
+    form.value = { name: '', muscle_group: '', description: '', load_type: 'weight', has_incline: false, video_url: '' };
     file.value = null;
     preview.value = null;
     await load();
@@ -104,6 +105,13 @@ onMounted(load);
             <option value="level">Livello di difficoltà — es. tapis roulant</option>
           </select>
         </div>
+        <label class="flex items-center gap-2 text-sm text-gray-700">
+          <input
+            v-model="form.has_incline" type="checkbox"
+            class="h-4 w-4 rounded border-gray-300 text-brand focus:ring-brand"
+          />
+          Registra anche la pendenza (%) — es. tapis roulant
+        </label>
         <input
           v-model="form.video_url" type="url" placeholder="URL video esecuzione (opzionale, es. YouTube)"
           class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand focus:outline-none"

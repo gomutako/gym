@@ -38,6 +38,14 @@ function unitLabel(loadType) {
 }
 // Esercizi "a livello" (es. tapis roulant): le "reps" sono minuti di esecuzione
 const isLevel = (ex) => ex?.load_type === 'level';
+// Esercizi con pendenza (es. tapis roulant): serie con una colonna in più (%)
+const hasIncline = (ex) => !!ex?.has_incline;
+// Colonne griglia serie: +1 colonna (pendenza) quando l'esercizio la prevede
+const gridCols = computed(() =>
+  hasIncline(current.value)
+    ? 'grid-cols-[1.5rem_1fr_1fr_1fr_auto_2rem]'
+    : 'grid-cols-[1.5rem_1fr_1fr_auto_2rem]'
+);
 function fmtTimer(sec) {
   const m = Math.floor(sec / 60);
   const s = sec % 60;
@@ -139,7 +147,12 @@ function onSetButton(exI, rowI) {
 function addSet(exI) {
   const ex = log.value[exI];
   const last = ex.sets_log[ex.sets_log.length - 1];
-  ex.sets_log.push({ reps: last?.reps ?? ex.target_reps ?? null, load: last?.load ?? null, done: false });
+  ex.sets_log.push({
+    reps: last?.reps ?? ex.target_reps ?? null,
+    load: last?.load ?? null,
+    ...(hasIncline(ex) ? { incline: last?.incline ?? null } : {}),
+    done: false,
+  });
   persist();
 }
 
@@ -269,10 +282,11 @@ onMounted(async () => {
                 <!-- Righe delle serie -->
                 <div class="mt-3 space-y-2">
                   <!-- intestazione colonne -->
-                  <div class="grid grid-cols-[1.5rem_1fr_1fr_auto_2rem] items-center gap-2 px-1 text-[11px] uppercase tracking-wide text-gray-400">
+                  <div :class="gridCols" class="grid items-center gap-2 px-1 text-[11px] uppercase tracking-wide text-gray-400">
                     <span>#</span>
                     <span>{{ isLevel(current) ? 'min' : 'reps' }}</span>
                     <span>{{ unitLabel(current.load_type) }}</span>
+                    <span v-if="hasIncline(current)">pend. %</span>
                     <span></span>
                     <span></span>
                   </div>
@@ -280,10 +294,10 @@ onMounted(async () => {
                   <div
                     v-for="(row, ri) in current.sets_log"
                     :key="ri"
-                    class="grid grid-cols-[1.5rem_1fr_1fr_auto_2rem] items-center gap-2 rounded-xl px-2 py-1.5 transition-colors"
-                    :class="restState(index, ri) === 'resting'
+                    :class="[gridCols, restState(index, ri) === 'resting'
                       ? 'bg-yellow-100'
-                      : (row.done ? 'bg-emerald-100' : 'bg-gray-50')"
+                      : (row.done ? 'bg-emerald-100' : 'bg-gray-50')]"
+                    class="grid items-center gap-2 rounded-xl px-2 py-1.5 transition-colors"
                   >
                     <span class="text-center text-sm font-semibold text-gray-500">{{ ri + 1 }}</span>
 
@@ -293,6 +307,11 @@ onMounted(async () => {
 
                     <input v-model.number="row.load" type="number" min="0" step="0.5" inputmode="decimal"
                       :placeholder="unitLabel(current.load_type)"
+                      class="w-full rounded-lg border-0 bg-white px-2 py-1.5 text-center text-sm focus:outline-none focus:ring-2 focus:ring-brand/40"
+                      @change="persist" />
+
+                    <input v-if="hasIncline(current)" v-model.number="row.incline" type="number" min="0" step="0.5" inputmode="decimal"
+                      placeholder="%"
                       class="w-full rounded-lg border-0 bg-white px-2 py-1.5 text-center text-sm focus:outline-none focus:ring-2 focus:ring-brand/40"
                       @change="persist" />
 

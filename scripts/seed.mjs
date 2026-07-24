@@ -79,8 +79,8 @@ const catalog = [
     description: 'Bilanciere vicino alle tibie, schiena dritta. Estendi anche e ginocchia insieme mantenendo il core contratto.' },
   { name: 'Trazioni', muscle_group: 'Dorsali', color: '#d97706', load_type: 'weight',
     description: 'Presa prona poco più larga delle spalle. Tira i gomiti verso il basso portando il mento sopra la sbarra, controlla la discesa.' },
-  { name: 'Tapis roulant', muscle_group: 'Cardio', color: '#0891b2', load_type: 'level',
-    description: 'Corsa a ritmo costante. Imposta il livello di difficoltà (pendenza/velocità) indicato dalla scheda.' },
+  { name: 'Tapis roulant', muscle_group: 'Cardio', color: '#0891b2', load_type: 'level', has_incline: true,
+    description: 'Corsa a ritmo costante. Imposta il livello di difficoltà (velocità) e la pendenza indicati dalla scheda.' },
 ];
 
 const exerciseIdByName = {};
@@ -96,7 +96,7 @@ for (const ex of catalog) {
   const { data } = await admin
     .from('exercises')
     .upsert(
-      { name: ex.name, muscle_group: ex.muscle_group, description: ex.description, load_type: ex.load_type, video_url: ex.video_url ?? null, image_path: path },
+      { name: ex.name, muscle_group: ex.muscle_group, description: ex.description, load_type: ex.load_type, has_incline: ex.has_incline ?? false, video_url: ex.video_url ?? null, image_path: path },
       { onConflict: 'name' }
     )
     .select()
