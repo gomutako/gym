@@ -4,13 +4,26 @@
 // scheda con TITOLO e GIORNATE; ogni giornata ha i suoi esercizi (dal catalogo)
 // con serie/ripetizioni/recupero.
 import { ref, onMounted, computed, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { api } from '@/lib/api';
 import { exerciseImageUrl } from '@/lib/storage';
 import Combobox from '@/components/Combobox.vue';
+import Modal from '@/components/Modal.vue';
+import WorkoutDaysEditor from '@/components/WorkoutDaysEditor.vue';
+import ClientCard from '@/components/ClientCard.vue';
+
+const route = useRoute();
+const router = useRouter();
 
 const members = ref([]);
 const catalog = ref([]);
-const selectedMemberId = ref('');
+const templates = ref([]);
+// Il cliente è fissato dalla rotta (/clienti/:memberId/schede)
+const selectedMemberId = computed(() => route.params.memberId || '');
+const member = computed(
+  () => members.value.find((m) => m.id === selectedMemberId.value) || null
+);
+const memberName = computed(() => member.value?.full_name || 'Cliente');
 const schede = ref([]); // schede del cliente selezionato
 
 // Editor
@@ -18,7 +31,14 @@ const editing = ref(false);
 const currentId = ref(null); // null = nuova scheda
 const title = ref('');
 const notes = ref('');
+const goal = ref('');
+const level = ref('');
 const days = ref([]); // [{ name, exercises: [{exercise_id, sets, reps, rest_seconds}] }]
+const editLevelOptions = [
+  { value: 'principiante', label: 'Principiante' },
+  { value: 'intermedio', label: 'Intermedio' },
+  { value: 'avanzato', label: 'Avanzato' },
+];
 
 const loading = ref(false);
 const saving = ref(false);
@@ -38,6 +58,8 @@ function fmtDateTime(iso) {
   if (!iso) return '';
   return new Date(iso).toLocaleString('it-IT', { dateStyle: 'medium', timeStyle: 'short' });
 }
+// Numero totale di esercizi della scheda (somma sulle giornate)
+const schedaExCount = (s) => (s.days_json || []).reduce((n, d) => n + (d.exercises?.length || 0), 0);
 
 // Scheda aperta nell'editor, per mostrarne le date (null se è nuova)
 const currentScheda = computed(() => schede.value.find((s) => s.id === currentId.value) || null);
@@ -121,63 +143,181 @@ async function loadSchede() {
 }
 
 function newScheda() {
+  newMenuOpen.value = false;
   currentId.value = null;
   title.value = '';
   notes.value = '';
+  goal.value = '';
+  level.value = '';
   days.value = [{ name: 'Giorno A', exercises: [] }];
   message.value = '';
   editing.value = true;
+}
+
+// --- Pulsante composto "Nuova scheda": menu a tendina + scelta da modello ---
+const newMenuOpen = ref(false);
+const tplPickOpen = ref(false);
+
+// Tabella modelli nella modale: ricerca libera + filtro livello + paginazione
+const tplSearch = ref('');
+const tplLevelFilter = ref(''); // '' = tutti i livelli
+const tplPage = ref(1);
+const TPL_PAGE_SIZE = 5;
+
+// Livelli presenti nei modelli, ordinati per difficoltà
+const LEVEL_RANK = { principiante: 0, intermedio: 1, avanzato: 2 };
+const tplLevels = computed(() =>
+  [...new Set(templates.value.map((t) => t.level).filter(Boolean))].sort(
+    (a, b) => (LEVEL_RANK[a] ?? 9) - (LEVEL_RANK[b] ?? 9)
+  )
+);
+const tplLevelOptions = computed(() =>
+  tplLevels.value.map((l) => ({ value: l, label: l[0].toUpperCase() + l.slice(1) }))
+);
+const tplDays = (t) => (t.days_json || []).length;
+const tplExercises = (t) => (t.days_json || []).reduce((s, d) => s + (d.exercises?.length || 0), 0);
+
+const tplSortKey = ref('title'); // 'title' | 'days' | 'exercises'
+const tplSortDir = ref('asc');
+function toggleTplSort(key) {
+  if (tplSortKey.value === key) {
+    tplSortDir.value = tplSortDir.value === 'asc' ? 'desc' : 'asc';
+  } else {
+    tplSortKey.value = key;
+    tplSortDir.value = 'asc';
+  }
+}
+function tplSortIcon(key) {
+  if (tplSortKey.value !== key) return '↕';
+  return tplSortDir.value === 'asc' ? '↑' : '↓';
+}
+function tplSortVal(t, key) {
+  if (key === 'days') return tplDays(t);
+  if (key === 'exercises') return tplExercises(t);
+  if (key === 'level') return (t.level || '').toLowerCase();
+  return (t.title || '').toLowerCase();
+}
+
+const filteredTemplates = computed(() => {
+  const q = tplSearch.value.trim().toLowerCase();
+  const lvl = tplLevelFilter.value;
+  return templates.value.filter((t) => {
+    if (lvl && t.level !== lvl) return false;
+    if (!q) return true;
+    return [t.title, t.goal, t.level].filter(Boolean).some((v) => v.toLowerCase().includes(q));
+  });
+});
+const sortedTemplates = computed(() => {
+  const dir = tplSortDir.value === 'asc' ? 1 : -1;
+  return [...filteredTemplates.value].sort((a, b) => {
+    const va = tplSortVal(a, tplSortKey.value);
+    const vb = tplSortVal(b, tplSortKey.value);
+    const cmp = va < vb ? -1 : va > vb ? 1 : 0;
+    return cmp * dir;
+  });
+});
+const tplPageCount = computed(() => Math.max(1, Math.ceil(sortedTemplates.value.length / TPL_PAGE_SIZE)));
+const pagedTemplates = computed(() =>
+  sortedTemplates.value.slice((tplPage.value - 1) * TPL_PAGE_SIZE, tplPage.value * TPL_PAGE_SIZE)
+);
+watch([tplSearch, tplLevelFilter, tplSortKey, tplSortDir], () => { tplPage.value = 1; });
+
+function openTemplatePicker() {
+  newMenuOpen.value = false;
+  tplSearch.value = '';
+  tplLevelFilter.value = '';
+  tplPage.value = 1;
+  error.value = '';
+  tplPickOpen.value = true;
+}
+
+// Crea una nuova scheda copiando il modello scelto, poi apre l'editor per rifinirla.
+async function newFromTemplate(tpl) {
+  if (!tpl) return;
+  saving.value = true;
+  error.value = '';
+  try {
+    const created = await api.post('/api/workouts', {
+      member_id: selectedMemberId.value,
+      title: tpl.title,
+      notes: tpl.description || '',
+      goal: tpl.goal || null,
+      level: tpl.level || null,
+      days_json: normalizeDays(tpl.days_json),
+    });
+    tplPickOpen.value = false;
+    schede.value = await api.get(`/api/workouts/member/${selectedMemberId.value}`);
+    editScheda(created); // apre l'editor sulla scheda appena creata
+    message.value = 'Scheda creata dal modello — rifiniscila e salva ✔';
+  } catch (e) {
+    error.value = e.message;
+  } finally {
+    saving.value = false;
+  }
+}
+
+// --- Salva una scheda (o lo stato dell'editor) come nuovo MODELLO ---
+const saveTplOpen = ref(false);
+const stpTitle = ref('');
+const stpGoal = ref('');
+const stpLevel = ref('');
+const stpNotes = ref('');
+const stpDays = ref([]);
+const stpSaving = ref(false);
+const stpLevelOptions = [
+  { value: 'principiante', label: 'Principiante' },
+  { value: 'intermedio', label: 'Intermedio' },
+  { value: 'avanzato', label: 'Avanzato' },
+];
+
+// source = una scheda della lista, oppure null = stato corrente dell'editor
+function openSaveAsTemplate(source = null) {
+  const base = source
+    ? { title: source.title, notes: source.notes, goal: source.goal, level: source.level, days: source.days_json }
+    : { title: title.value, notes: notes.value, goal: goal.value, level: level.value, days: days.value };
+  stpTitle.value = `${base.title || 'Senza titolo'} (modello)`;
+  stpNotes.value = base.notes || '';
+  stpGoal.value = base.goal || '';
+  stpLevel.value = base.level || '';
+  stpDays.value = normalizeDays(base.days);
+  error.value = '';
+  saveTplOpen.value = true;
+}
+
+async function saveAsTemplate() {
+  if (!stpTitle.value.trim()) return;
+  stpSaving.value = true;
+  error.value = '';
+  try {
+    await api.post('/api/templates', {
+      title: stpTitle.value.trim(),
+      description: stpNotes.value.trim() || null,
+      goal: stpGoal.value.trim() || null,
+      level: stpLevel.value || null,
+      days_json: stpDays.value,
+    });
+    saveTplOpen.value = false;
+    message.value = 'Modello creato dalla scheda ✔';
+  } catch (e) {
+    error.value = e.message;
+  } finally {
+    stpSaving.value = false;
+  }
 }
 
 function editScheda(s) {
   currentId.value = s.id;
   title.value = s.title || '';
   notes.value = s.notes || '';
-  // Copia profonda per non mutare la lista
+  goal.value = s.goal || '';
+  level.value = s.level || '';
+  // Copia profonda per non mutare la lista (il _uid lo assegna l'editor)
   days.value = (s.days_json || []).map((d) => ({
     name: d.name || '',
-    exercises: (d.exercises || []).map((e) => newRow(e)),
+    exercises: (d.exercises || []).map((e) => ({ ...e })),
   }));
   message.value = '';
   editing.value = true;
-}
-
-// Riga esercizio dell'editor. `_uid` serve solo come :key stabile: riordinando
-// la lista, le combobox devono seguire la riga e non l'indice. Non viene salvato.
-let uid = 0;
-function newRow(e = {}) {
-  return {
-    _uid: ++uid,
-    exercise_id: e.exercise_id || '',
-    sets: e.sets ?? 3,
-    reps: e.reps ?? 10,
-    rest_seconds: e.rest_seconds ?? 90,
-  };
-}
-
-// --- Gestione giornate ---
-function addDay() {
-  const letter = String.fromCharCode(65 + days.value.length); // A, B, C...
-  days.value.push({ name: `Giorno ${letter}`, exercises: [] });
-}
-function removeDay(i) {
-  days.value.splice(i, 1);
-}
-
-// --- Gestione esercizi in una giornata ---
-function addExercise(dayIdx) {
-  days.value[dayIdx].exercises.push(newRow());
-}
-function removeExercise(dayIdx, exIdx) {
-  days.value[dayIdx].exercises.splice(exIdx, 1);
-}
-// Sposta un esercizio su/giù nella giornata (delta -1 / +1)
-function moveExercise(dayIdx, exIdx, delta) {
-  const list = days.value[dayIdx].exercises;
-  const to = exIdx + delta;
-  if (to < 0 || to >= list.length) return;
-  const [item] = list.splice(exIdx, 1);
-  list.splice(to, 0, item);
 }
 
 async function save() {
@@ -188,6 +328,8 @@ async function save() {
     const payload = {
       title: title.value,
       notes: notes.value,
+      goal: goal.value || null,
+      level: level.value || null,
       days_json: normalizeDays(days.value),
     };
     if (currentId.value) {
@@ -298,28 +440,27 @@ async function deleteScheda() {
 
 onMounted(async () => {
   try {
-    [members.value, catalog.value] = await Promise.all([
+    [members.value, catalog.value, templates.value] = await Promise.all([
       api.get('/api/members'),
       api.get('/api/exercises'),
+      api.get('/api/templates'),
     ]);
+    await loadSchede();
   } catch (e) {
     error.value = e.message;
   }
 });
+
+// Se si naviga a un altro cliente senza smontare la vista, ricarica le schede
+watch(selectedMemberId, loadSchede);
 </script>
 
 <template>
   <div class="space-y-4">
-    <!-- Selezione cliente -->
-    <div>
-      <label class="mb-1 block text-sm font-medium text-gray-700">Cliente</label>
-      <Combobox
-        v-model="selectedMemberId"
-        :options="memberOptions"
-        placeholder="Cerca cliente…"
-        empty-text="Nessun cliente trovato"
-        @change="loadSchede"
-      />
+    <!-- Header: torna ai clienti + card cliente -->
+    <div class="space-y-2">
+      <button class="text-sm text-brand active:scale-95" @click="router.push({ name: 'clients' })">‹ Clienti</button>
+      <ClientCard v-if="member" :member="member" />
     </div>
 
     <p v-if="error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{{ error }}</p>
@@ -331,12 +472,37 @@ onMounted(async () => {
       <section v-if="!editing" class="space-y-2">
         <div class="flex items-center justify-between">
           <h2 class="font-semibold text-gray-900">Schede</h2>
-          <button
-            class="rounded-full bg-brand px-4 py-2 text-sm font-semibold text-white active:scale-95"
-            @click="newScheda"
-          >
-            + Nuova scheda
-          </button>
+          <!-- Pulsante composto: azione principale + menu (da modello) -->
+          <div class="relative">
+            <div class="flex">
+              <button
+                class="rounded-l-full bg-brand px-4 py-2 text-sm font-semibold text-white active:scale-95"
+                @click="newScheda"
+              >
+                + Nuova scheda
+              </button>
+              <button
+                class="rounded-r-full border-l border-white/30 bg-brand px-2 text-white active:scale-95"
+                aria-label="Altre opzioni" @click="newMenuOpen = !newMenuOpen"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                     stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"
+                     :class="newMenuOpen && 'rotate-180'"><path d="M6 9l6 6 6-6" /></svg>
+              </button>
+            </div>
+            <div v-if="newMenuOpen" class="fixed inset-0 z-10" @click="newMenuOpen = false"></div>
+            <div
+              v-if="newMenuOpen"
+              class="absolute right-0 z-20 mt-1 w-52 overflow-hidden rounded-xl border border-gray-200 bg-white py-1 shadow-lg"
+            >
+              <button class="block w-full px-4 py-2 text-left text-sm text-gray-700 active:bg-gray-100" @click="newScheda">
+                Scheda vuota
+              </button>
+              <button class="block w-full px-4 py-2 text-left text-sm text-gray-700 active:bg-gray-100" @click="openTemplatePicker">
+                Da un modello…
+              </button>
+            </div>
+          </div>
         </div>
 
         <p v-if="!schede.length" class="rounded-xl bg-white p-4 text-sm text-gray-400 shadow-sm">
@@ -363,17 +529,12 @@ onMounted(async () => {
                         Titolo <span class="text-gray-300">{{ schedaSortIcon('title') }}</span>
                       </button>
                     </th>
-                    <th class="w-14 px-2 py-2 text-center">
-                      <button class="font-semibold uppercase" @click="toggleSchedaSort('days')">
-                        Gg <span class="text-gray-300">{{ schedaSortIcon('days') }}</span>
-                      </button>
-                    </th>
                     <th class="w-24 px-2 py-2">
                       <button class="font-semibold uppercase" @click="toggleSchedaSort('updated_at')">
                         Agg. <span class="text-gray-300">{{ schedaSortIcon('updated_at') }}</span>
                       </button>
                     </th>
-                    <th class="w-16 px-2 py-2"></th>
+                    <th class="w-24 px-2 py-2"></th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-50">
@@ -395,18 +556,49 @@ onMounted(async () => {
                         </button>
                         <div class="min-w-0">
                           <p class="truncate font-medium text-gray-900">{{ s.title || 'Senza titolo' }}</p>
-                          <p class="text-xs text-gray-400" :title="`Creata il ${fmtDateTime(s.created_at)}`">
-                            Creata {{ fmtDate(s.created_at) }}
-                          </p>
+                          <div v-if="s.goal || s.level" class="mt-0.5 flex flex-wrap gap-1">
+                            <span v-if="s.goal" class="rounded-full bg-brand/10 px-2 py-0.5 text-[10px] font-semibold capitalize text-brand">{{ s.goal }}</span>
+                            <span v-if="s.level" class="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold capitalize text-gray-500">{{ s.level }}</span>
+                          </div>
+                          <div class="mt-0.5 flex flex-wrap items-center gap-1">
+                            <span class="inline-flex items-center gap-1 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500"
+                                  :title="`Creata il ${fmtDateTime(s.created_at)}`">
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3 w-3">
+                                <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
+                              </svg>
+                              {{ fmtDate(s.created_at) }}
+                            </span>
+                            <span class="inline-flex items-center gap-1 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500" title="Giornate">
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3 w-3">
+                                <rect x="3" y="4" width="18" height="17" rx="2" /><path d="M3 9h18M8 2v4M16 2v4" />
+                              </svg>
+                              {{ (s.days_json || []).length }}
+                            </span>
+                            <span class="inline-flex items-center gap-1 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500" title="Esercizi">
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3 w-3">
+                                <path d="M6.5 6.5l11 11M4 7l3-3 3 3-3 3zM14 17l3-3 3 3-3 3zM3 12h2M19 12h2" />
+                              </svg>
+                              {{ schedaExCount(s) }}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     </td>
-                    <td class="px-2 py-2 text-center text-gray-600">{{ (s.days_json || []).length }}</td>
                     <td class="px-2 py-2 text-xs text-gray-500" :title="`Aggiornata il ${fmtDateTime(s.updated_at)}`">
                       {{ fmtDate(s.updated_at) }}
                     </td>
                     <td class="px-2 py-2">
-                      <div class="flex justify-end gap-1">
+                      <div class="flex justify-end gap-0.5">
+                        <button
+                          title="Salva come modello" aria-label="Salva come modello"
+                          class="rounded-lg p-1.5 text-gray-500 active:scale-90"
+                          @click="openSaveAsTemplate(s)"
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                               stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5">
+                            <path d="M12 3l9 5-9 5-9-5 9-5zM3 13l9 5 9-5" />
+                          </svg>
+                        </button>
                         <button
                           title="Duplica" aria-label="Duplica"
                           class="rounded-lg p-1.5 text-gray-500 active:scale-90"
@@ -452,11 +644,28 @@ onMounted(async () => {
       <section v-else class="space-y-4">
         <button class="text-sm text-brand" @click="editing = false">‹ Torna alle schede</button>
 
-        <input
-          v-model="title"
-          placeholder="Titolo scheda (es. Ipertrofia - Fase 1)"
-          class="w-full rounded-xl border border-gray-300 px-4 py-3 font-medium focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
-        />
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Titolo scheda</label>
+          <input
+            v-model="title"
+            placeholder="Es. Ipertrofia - Fase 1"
+            class="w-full rounded-xl border border-gray-300 px-4 py-3 font-medium focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+          />
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="mb-1 block text-xs font-medium text-gray-500">Tipo</label>
+            <input
+              v-model="goal" placeholder="Es. ipertrofia"
+              class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand focus:outline-none"
+            />
+          </div>
+          <div>
+            <label class="mb-1 block text-xs font-medium text-gray-500">Livello</label>
+            <Combobox v-model="level" :options="editLevelOptions" dense placeholder="—" empty-text="—" />
+          </div>
+        </div>
 
         <div v-if="currentScheda" class="-mt-2 flex items-center justify-between gap-2">
           <p class="text-xs text-gray-400">
@@ -482,145 +691,12 @@ onMounted(async () => {
           Catalogo vuoto: aggiungi esercizi nella sezione <b>Esercizi</b>.
         </p>
 
-        <!-- Giornate -->
-        <div v-for="(day, di) in days" :key="di" class="rounded-2xl bg-white p-3 shadow-sm">
-          <div class="mb-2 flex items-center gap-2">
-            <input
-              v-model="day.name"
-              placeholder="Nome giornata"
-              class="min-w-0 flex-1 rounded-lg border border-gray-300 px-2 py-1.5 text-sm font-semibold focus:border-brand focus:outline-none"
-            />
-            <button
-              title="Rimuovi giornata" aria-label="Rimuovi giornata"
-              class="shrink-0 rounded-lg bg-rose-50 p-2 text-rose-600 active:scale-90"
-              @click="removeDay(di)"
-            >
-              <!-- cestino: come nel catalogo esercizi -->
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
-                   stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5">
-                <path d="M3 6h18" /><path d="M8 6V4h8v2" />
-                <path d="M6 6l1 14h10l1-14" /><path d="M10 11v6M14 11v6" />
-              </svg>
-            </button>
-          </div>
-
-          <!-- Esercizi della giornata -->
-          <div v-for="(ex, ei) in day.exercises" :key="ex._uid" class="mb-3 flex gap-2">
-            <div class="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-gray-100">
-              <img
-                v-if="catalogById[ex.exercise_id]?.image_path"
-                :src="exerciseImageUrl(catalogById[ex.exercise_id].image_path)"
-                class="h-full w-full object-cover"
-              />
-              <div v-else class="flex h-full items-center justify-center text-lg">🏋️</div>
-            </div>
-            <div class="min-w-0 flex-1">
-              <Combobox
-                v-model="ex.exercise_id"
-                :options="catalogOptions"
-                dense
-                :clearable="false"
-                placeholder="Cerca esercizio…"
-                empty-text="Nessun esercizio trovato"
-              />
-              <!-- serie / ripetizioni / recupero: icona a sinistra, resta leggibile
-                   anche a campo pieno (il placeholder sparisce col valore) -->
-              <div class="mt-1 grid grid-cols-3 gap-1">
-                <div class="relative" title="Serie">
-                  <span class="pointer-events-none absolute inset-y-0 left-1.5 flex items-center text-gray-400">
-                    <!-- pila = numero di serie -->
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                         stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5">
-                      <path d="M12 3l9 5-9 5-9-5 9-5Z" /><path d="M3 13l9 5 9-5" />
-                    </svg>
-                  </span>
-                  <input v-model.number="ex.sets" type="number" min="1" placeholder="serie" aria-label="Serie"
-                    class="w-full rounded border border-gray-300 py-1 pl-6 pr-1 text-center text-xs focus:border-brand focus:outline-none" />
-                </div>
-
-                <div
-                  class="relative"
-                  :title="catalogById[ex.exercise_id]?.load_type === 'level' ? 'Minuti' : 'Ripetizioni'"
-                >
-                  <span class="pointer-events-none absolute inset-y-0 left-1.5 flex items-center text-gray-400">
-                    <!-- level: orologio (minuti) · weight: frecce di ripetizione -->
-                    <svg v-if="catalogById[ex.exercise_id]?.load_type === 'level'"
-                         viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                         stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5">
-                      <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
-                    </svg>
-                    <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                         stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5">
-                      <path d="M17 2l4 4-4 4" /><path d="M3 11V9a4 4 0 0 1 4-4h14" />
-                      <path d="M7 22l-4-4 4-4" /><path d="M21 13v2a4 4 0 0 1-4 4H3" />
-                    </svg>
-                  </span>
-                  <input v-model.number="ex.reps" type="number" min="1"
-                    :placeholder="catalogById[ex.exercise_id]?.load_type === 'level' ? 'min' : 'ripet.'"
-                    :aria-label="catalogById[ex.exercise_id]?.load_type === 'level' ? 'Minuti' : 'Ripetizioni'"
-                    class="w-full rounded border border-gray-300 py-1 pl-6 pr-1 text-center text-xs focus:border-brand focus:outline-none" />
-                </div>
-
-                <div class="relative" title="Recupero (secondi)">
-                  <span class="pointer-events-none absolute inset-y-0 left-1.5 flex items-center text-gray-400">
-                    <!-- cronometro = recupero -->
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                         stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5">
-                      <path d="M10 2h4" /><path d="M12 14v-4" /><circle cx="12" cy="14" r="8" />
-                    </svg>
-                  </span>
-                  <input v-model.number="ex.rest_seconds" type="number" min="0" step="15" placeholder="rec.s"
-                    aria-label="Recupero in secondi"
-                    class="w-full rounded border border-gray-300 py-1 pl-6 pr-1 text-center text-xs focus:border-brand focus:outline-none" />
-                </div>
-              </div>
-            </div>
-            <div class="flex shrink-0 flex-col items-center gap-0.5">
-              <button
-                :disabled="ei === 0" title="Sposta su" aria-label="Sposta su"
-                class="rounded p-1 text-gray-400 active:scale-90 disabled:opacity-30"
-                @click="moveExercise(di, ei, -1)"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                     stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><path d="M18 15l-6-6-6 6" /></svg>
-              </button>
-              <button
-                :disabled="ei === day.exercises.length - 1" title="Sposta giù" aria-label="Sposta giù"
-                class="rounded p-1 text-gray-400 active:scale-90 disabled:opacity-30"
-                @click="moveExercise(di, ei, 1)"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                     stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><path d="M6 9l6 6 6-6" /></svg>
-              </button>
-              <button
-                title="Rimuovi" aria-label="Rimuovi"
-                class="rounded p-1 text-rose-500 active:scale-90"
-                @click="removeExercise(di, ei)"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                     stroke-linecap="round" class="h-4 w-4"><path d="M6 6l12 12M18 6L6 18" /></svg>
-              </button>
-            </div>
-          </div>
-
-          <button
-            class="mt-1 flex w-full items-center justify-center gap-1.5 rounded-lg bg-brand/10 py-2 text-xs font-semibold text-brand active:scale-95"
-            @click="addExercise(di)"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
-                 stroke-linecap="round" class="h-4 w-4"><path d="M12 5v14M5 12h14" /></svg>
-            Aggiungi esercizio
-          </button>
-        </div>
-
-        <button
-          class="flex w-full items-center justify-center gap-2 rounded-xl border border-brand bg-white py-3 text-sm font-semibold text-brand active:scale-95"
-          @click="addDay"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
-               stroke-linecap="round" class="h-5 w-5"><path d="M12 5v14M5 12h14" /></svg>
-          Aggiungi giornata
-        </button>
+        <!-- Giornate + esercizi (editor condiviso) -->
+        <WorkoutDaysEditor
+          v-model="days"
+          :catalog-options="catalogOptions"
+          :catalog-by-id="catalogById"
+        />
 
         <!-- Note -->
         <div>
@@ -651,17 +727,18 @@ onMounted(async () => {
             Elimina
           </button>
         </div>
+        <button
+          class="w-full rounded-xl border border-brand/40 bg-brand/5 py-2.5 text-sm font-semibold text-brand active:scale-95"
+          @click="openSaveAsTemplate()"
+        >
+          ★ Salva come modello
+        </button>
       </section>
     </template>
 
     <!-- Dialogo duplica / assegna -->
-    <div
-      v-if="dupOpen"
-      class="fixed inset-0 z-30 flex items-end justify-center bg-black/40 p-4 sm:items-center"
-      @click.self="dupOpen = false"
-    >
-      <div class="w-full max-w-sm space-y-3 rounded-2xl bg-white p-4 shadow-xl">
-        <h2 class="font-semibold text-gray-900">Duplica scheda</h2>
+    <Modal :open="dupOpen" title="Duplica scheda" @close="dupOpen = false">
+      <div class="space-y-3">
         <p class="text-xs text-gray-500">
           Crea una copia indipendente: scegli a chi assegnarla.
         </p>
@@ -701,6 +778,143 @@ onMounted(async () => {
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
+
+    <!-- Nuova scheda da un modello -->
+    <Modal :open="tplPickOpen" title="Nuova scheda da modello" @close="tplPickOpen = false">
+      <p v-if="error" class="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{{ error }}</p>
+      <p class="mb-3 text-sm text-gray-500">
+        Scegli un modello: verrà creata una scheda per <b>{{ memberName }}</b> e si aprirà l'editor.
+      </p>
+      <div class="mb-2 flex gap-2">
+        <input
+          v-model="tplSearch" type="search" placeholder="Cerca modello…"
+          class="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand focus:outline-none"
+        />
+        <div class="w-36 shrink-0">
+          <Combobox
+            v-model="tplLevelFilter"
+            :options="tplLevelOptions"
+            dense
+            placeholder="Tutti i livelli"
+            empty-text="Nessun livello"
+          />
+        </div>
+      </div>
+
+      <p v-if="!filteredTemplates.length" class="rounded-lg bg-gray-50 p-3 text-sm text-gray-400">
+        Nessun modello trovato.
+      </p>
+      <template v-else>
+        <div class="overflow-hidden rounded-xl border border-gray-100">
+          <table class="w-full table-fixed text-left text-sm">
+            <thead class="border-b border-gray-100 text-xs uppercase text-gray-400">
+              <tr>
+                <th class="px-3 py-2">
+                  <button class="font-semibold uppercase" @click="toggleTplSort('title')">
+                    Modello <span class="text-gray-300">{{ tplSortIcon('title') }}</span>
+                  </button>
+                </th>
+                <th class="w-20 px-1 py-2">
+                  <button class="font-semibold uppercase" @click="toggleTplSort('level')">
+                    Liv. <span class="text-gray-300">{{ tplSortIcon('level') }}</span>
+                  </button>
+                </th>
+                <th class="w-8 px-1 py-2 text-center">
+                  <button class="font-semibold uppercase" @click="toggleTplSort('days')">
+                    Gg <span class="text-gray-300">{{ tplSortIcon('days') }}</span>
+                  </button>
+                </th>
+                <th class="w-8 px-1 py-2 text-center">
+                  <button class="font-semibold uppercase" @click="toggleTplSort('exercises')">
+                    Es <span class="text-gray-300">{{ tplSortIcon('exercises') }}</span>
+                  </button>
+                </th>
+                <th class="w-10 px-1 py-2"></th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-50">
+              <tr v-for="t in pagedTemplates" :key="t.id">
+                <td class="px-3 py-2">
+                  <p class="truncate font-medium text-gray-900">{{ t.title }}</p>
+                  <p v-if="t.goal" class="truncate text-[11px] capitalize text-gray-400">{{ t.goal }}</p>
+                </td>
+                <td class="px-1 py-2">
+                  <span class="truncate capitalize text-xs text-gray-500">{{ t.level || '—' }}</span>
+                </td>
+                <td class="px-1 py-2 text-center text-gray-500">{{ tplDays(t) }}</td>
+                <td class="px-1 py-2 text-center text-gray-500">{{ tplExercises(t) }}</td>
+                <td class="px-1 py-2 text-right">
+                  <button
+                    :disabled="saving" title="Crea da questo modello" aria-label="Crea da questo modello"
+                    class="rounded-lg bg-brand p-1.5 text-white active:scale-90 disabled:opacity-60"
+                    @click="newFromTemplate(t)"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                         stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+                      <path d="M12 5v14M5 12h14" />
+                    </svg>
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div v-if="tplPageCount > 1" class="mt-2 flex items-center justify-between text-xs text-gray-500">
+          <span>{{ filteredTemplates.length }} modelli</span>
+          <div class="flex items-center gap-2">
+            <button :disabled="tplPage === 1" class="rounded-lg border border-gray-300 px-3 py-1 font-semibold disabled:opacity-40" @click="tplPage--">‹</button>
+            <span>{{ tplPage }} / {{ tplPageCount }}</span>
+            <button :disabled="tplPage === tplPageCount" class="rounded-lg border border-gray-300 px-3 py-1 font-semibold disabled:opacity-40" @click="tplPage++">›</button>
+          </div>
+        </div>
+      </template>
+    </Modal>
+
+    <!-- Salva scheda come modello -->
+    <Modal :open="saveTplOpen" title="Salva come modello" @close="saveTplOpen = false">
+      <p v-if="error" class="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{{ error }}</p>
+      <p class="mb-3 text-sm text-gray-500">
+        Crea un modello riutilizzabile dalle giornate di questa scheda (non legato al cliente).
+      </p>
+      <div class="space-y-3">
+        <div>
+          <label class="mb-1 block text-xs font-medium text-gray-500">Titolo</label>
+          <input
+            v-model="stpTitle"
+            class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand focus:outline-none"
+          />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="mb-1 block text-xs font-medium text-gray-500">Tipo</label>
+            <input
+              v-model="stpGoal" placeholder="Es. ipertrofia"
+              class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand focus:outline-none"
+            />
+          </div>
+          <div>
+            <label class="mb-1 block text-xs font-medium text-gray-500">Livello</label>
+            <Combobox v-model="stpLevel" :options="stpLevelOptions" dense placeholder="—" empty-text="—" />
+          </div>
+        </div>
+        <div class="flex gap-2 pt-1">
+          <button
+            class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-600"
+            @click="saveTplOpen = false"
+          >
+            Annulla
+          </button>
+          <button
+            :disabled="stpSaving || !stpTitle.trim()"
+            class="flex-1 rounded-lg bg-brand py-2 text-sm font-semibold text-white active:scale-95 disabled:opacity-60"
+            @click="saveAsTemplate"
+          >
+            {{ stpSaving ? 'Salvataggio…' : 'Crea modello' }}
+          </button>
+        </div>
+      </div>
+    </Modal>
   </div>
 </template>

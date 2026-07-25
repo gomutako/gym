@@ -10,19 +10,22 @@ const auth = useAuthStore();
 const tabs = computed(() => {
   const home = { name: 'dashboard', label: 'Home', icon: 'home' };
   const profile = { name: 'profile', label: 'Profilo', icon: 'user' };
+  const templates = { name: 'templates', label: 'Modelli', icon: 'stack' };
   if (auth.role === 'admin') {
     return [
       home,
       { name: 'users', label: 'Utenti', icon: 'group' },
       { name: 'schedule', label: 'Corsi', icon: 'calendar' },
+      templates,
       profile,
     ];
   }
   if (auth.role === 'trainer') {
     return [
       home,
-      { name: 'workouts', label: 'Schede', icon: 'clipboard' },
+      { name: 'clients', label: 'Clienti', icon: 'group' },
       { name: 'exercises', label: 'Esercizi', icon: 'dumbbell' },
+      templates,
       profile,
     ];
   }
@@ -78,6 +81,11 @@ const tabs = computed(() => {
               v-else-if="tab.icon === 'play'"
               stroke-linecap="round" stroke-linejoin="round"
               d="M14.752 11.168l-5.197-3.03A1 1 0 008 9.002v5.996a1 1 0 001.555.832l5.197-3.03a1 1 0 000-1.664zM21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+            />
+            <path
+              v-else-if="tab.icon === 'stack'"
+              stroke-linecap="round" stroke-linejoin="round"
+              d="M12 3l9 5-9 5-9-5 9-5zM3 13l9 5 9-5"
             />
             <path
               v-else

@@ -2,6 +2,7 @@
 // Dashboard Admin: statistiche sintetiche + report presenze per corso.
 import { ref, onMounted } from 'vue';
 import { api } from '@/lib/api';
+import IdentityCard from '@/components/IdentityCard.vue';
 
 const report = ref(null);
 const loading = ref(true);
@@ -26,6 +27,8 @@ onMounted(async () => {
 
 <template>
   <div class="space-y-5">
+    <IdentityCard />
+
     <p v-if="error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{{ error }}</p>
     <p v-if="loading" class="text-sm text-gray-400">Caricamento report…</p>
 

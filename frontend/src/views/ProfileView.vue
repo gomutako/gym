@@ -9,18 +9,35 @@ import { useThemeStore } from '@/stores/theme';
 import { api } from '@/lib/api';
 import { avatarUrl, uploadAvatar } from '@/lib/storage';
 import { subStatus, SUB_STATUS_LABEL, SUB_STATUS_RANK, formatDate } from '@/lib/subscriptions';
+import { computeBmi, bmiCategory, computeAge, GENDER_LABEL } from '@/lib/body';
+import Modal from '@/components/Modal.vue';
+import Combobox from '@/components/Combobox.vue';
+import WorkoutDays from '@/components/WorkoutDays.vue';
 
 const router = useRouter();
 const auth = useAuthStore();
 const theme = useThemeStore();
-const { fullName, firstName, lastName, phone, avatarPath, role, user } = storeToRefs(auth);
+const { fullName, firstName, lastName, phone, avatarPath, role, user,
+  gender, birthDate, heightCm, weightKg, notes } = storeToRefs(auth);
 const { mode } = storeToRefs(theme);
 
 const roleLabel = { admin: 'Amministratore', trainer: 'Istruttore', member: 'Cliente' };
+const genderOptions = [
+  { value: 'uomo', label: 'Uomo' },
+  { value: 'donna', label: 'Donna' },
+  { value: 'altro', label: 'Altro' },
+];
+
+// Dati fisici mostrati (read-only) sul profilo
+const age = computed(() => computeAge(birthDate.value));
+const bmi = computed(() => computeBmi(heightCm.value, weightKg.value));
 
 // --- Form dati personali ---
 const editing = ref(false);
-const form = ref({ first_name: '', last_name: '', phone: '' });
+const form = ref({ first_name: '', last_name: '', phone: '',
+  gender: '', birth_date: '', height_cm: '', weight_kg: '', notes: '' });
+// BMI in tempo reale nel form
+const formBmi = computed(() => computeBmi(form.value.height_cm, form.value.weight_kg));
 const file = ref(null);
 const preview = ref(null);
 const saving = ref(false);
@@ -31,7 +48,16 @@ const message = ref('');
 const shownAvatar = computed(() => preview.value || avatarUrl(avatarPath.value));
 
 function startEdit() {
-  form.value = { first_name: firstName.value, last_name: lastName.value, phone: phone.value };
+  form.value = {
+    first_name: firstName.value,
+    last_name: lastName.value,
+    phone: phone.value,
+    gender: gender.value,
+    birth_date: birthDate.value || '',
+    height_cm: heightCm.value ?? '',
+    weight_kg: weightKg.value ?? '',
+    notes: notes.value,
+  };
   file.value = null;
   preview.value = null;
   error.value = '';
@@ -53,6 +79,12 @@ async function save() {
     // cognome/telefono: stringa vuota => null (svuota il campo)
     fields.last_name = form.value.last_name.trim() || null;
     fields.phone = form.value.phone.trim() || null;
+    // Dati fisici: vuoto => null; numeri convertiti
+    fields.gender = form.value.gender || null;
+    fields.birth_date = form.value.birth_date || null;
+    fields.height_cm = form.value.height_cm === '' ? null : Number(form.value.height_cm);
+    fields.weight_kg = form.value.weight_kg === '' ? null : Number(form.value.weight_kg);
+    fields.notes = form.value.notes.trim() || null;
     if (file.value) fields.avatar_path = await uploadAvatar(user.value.id, file.value);
 
     await auth.updateProfile(fields);
@@ -136,6 +168,22 @@ function schedaVal(s, key) {
   if (key === 'title') return (s.title || '').toLowerCase();
   if (key === 'days') return (s.days_json || []).length;
   return s[key] || ''; // updated_at (ISO)
+}
+// Numero totale di esercizi della scheda (somma sulle giornate)
+const schedaExCount = (s) => (s.days_json || []).reduce((n, d) => n + (d.exercises?.length || 0), 0);
+
+// Visualizzazione scheda (modale). Il catalogo serve per nomi/immagini/chip
+// degli esercizi: caricato pigramente alla prima apertura.
+const catalog = ref([]);
+const catalogById = computed(() => Object.fromEntries(catalog.value.map((e) => [e.id, e])));
+const detailOpen = ref(false);
+const detailScheda = ref(null);
+async function openSchedaDetail(s) {
+  detailScheda.value = s;
+  detailOpen.value = true;
+  if (!catalog.value.length) {
+    try { catalog.value = await api.get('/api/exercises'); } catch (e) { error.value = e.message; }
+  }
 }
 function toggleSchedaSort(key) {
   if (schedeSortKey.value === key) {
@@ -230,7 +278,7 @@ async function logout() {
 
 <template>
   <div class="space-y-5">
-    <p v-if="error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{{ error }}</p>
+    <p v-if="error && !editing" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{{ error }}</p>
     <p v-if="message" class="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-600">{{ message }}</p>
 
     <!-- Intestazione profilo -->
@@ -261,19 +309,53 @@ async function logout() {
       </button>
     </div>
 
-    <!-- Form modifica dati -->
-    <section v-if="editing" class="rounded-2xl bg-white p-4 shadow-sm">
-      <h2 class="mb-3 font-semibold text-gray-900">Dati personali</h2>
+    <!-- Dati fisici (read-only) -->
+    <section class="rounded-2xl bg-white p-4 shadow-sm">
+      <h2 class="mb-3 font-semibold text-gray-900">Dati fisici</h2>
+      <dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+        <div class="flex justify-between gap-2">
+          <dt class="text-gray-500">Genere</dt>
+          <dd class="text-gray-900">{{ GENDER_LABEL[gender] || '—' }}</dd>
+        </div>
+        <div class="flex justify-between gap-2">
+          <dt class="text-gray-500">Età</dt>
+          <dd class="text-gray-900">{{ age != null ? age + ' anni' : '—' }}</dd>
+        </div>
+        <div class="flex justify-between gap-2">
+          <dt class="text-gray-500">Altezza</dt>
+          <dd class="text-gray-900">{{ heightCm ? heightCm + ' cm' : '—' }}</dd>
+        </div>
+        <div class="flex justify-between gap-2">
+          <dt class="text-gray-500">Peso</dt>
+          <dd class="text-gray-900">{{ weightKg ? weightKg + ' kg' : '—' }}</dd>
+        </div>
+        <div class="flex justify-between gap-2">
+          <dt class="text-gray-500">BMI</dt>
+          <dd class="text-gray-900">
+            <template v-if="bmi != null">{{ bmi }} <span class="text-xs text-gray-400">({{ bmiCategory(bmi) }})</span></template>
+            <template v-else>—</template>
+          </dd>
+        </div>
+      </dl>
+      <p v-if="notes" class="mt-3 border-t border-gray-100 pt-3 text-sm text-gray-600">{{ notes }}</p>
+    </section>
+
+    <!-- Form modifica dati in pop-up -->
+    <Modal :open="editing" title="Dati personali" @close="editing = false">
+      <p v-if="error" class="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{{ error }}</p>
       <form class="space-y-3" @submit.prevent="save">
-        <div class="flex items-center gap-3">
-          <div class="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand/10 text-2xl">
-            <img v-if="shownAvatar" :src="shownAvatar" alt="" class="h-full w-full object-cover" />
-            <template v-else>👤</template>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-gray-500">Foto profilo</label>
+          <div class="flex items-center gap-3">
+            <div class="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand/10 text-2xl">
+              <img v-if="shownAvatar" :src="shownAvatar" alt="" class="h-full w-full object-cover" />
+              <template v-else>👤</template>
+            </div>
+            <label class="cursor-pointer rounded-lg border border-dashed border-gray-300 px-4 py-2 text-sm text-gray-500">
+              📎 Cambia foto
+              <input type="file" accept="image/*" class="hidden" @change="onFile" />
+            </label>
           </div>
-          <label class="cursor-pointer rounded-lg border border-dashed border-gray-300 px-4 py-2 text-sm text-gray-500">
-            📎 Cambia foto
-            <input type="file" accept="image/*" class="hidden" @change="onFile" />
-          </label>
         </div>
 
         <div class="grid grid-cols-2 gap-3">
@@ -300,6 +382,46 @@ async function logout() {
           />
         </div>
 
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="mb-1 block text-xs font-medium text-gray-500">Genere</label>
+            <Combobox v-model="form.gender" :options="genderOptions" dense placeholder="—" empty-text="—" />
+          </div>
+          <div>
+            <label class="mb-1 block text-xs font-medium text-gray-500">Data di nascita</label>
+            <input
+              v-model="form.birth_date" type="date"
+              class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-brand focus:outline-none"
+            />
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="mb-1 block text-xs font-medium text-gray-500">Altezza (cm)</label>
+            <input
+              v-model="form.height_cm" type="number" min="0" step="0.1" placeholder="Es. 178"
+              class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-brand focus:outline-none"
+            />
+          </div>
+          <div>
+            <label class="mb-1 block text-xs font-medium text-gray-500">Peso (kg)</label>
+            <input
+              v-model="form.weight_kg" type="number" min="0" step="0.1" placeholder="Es. 74.5"
+              class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-brand focus:outline-none"
+            />
+          </div>
+        </div>
+        <p v-if="formBmi" class="text-xs text-gray-500">
+          BMI calcolato: <span class="font-semibold text-gray-700">{{ formBmi }}</span>
+        </p>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-gray-500">Note</label>
+          <textarea
+            v-model="form.notes" rows="3" placeholder="Note (opzionale)"
+            class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-brand focus:outline-none"
+          ></textarea>
+        </div>
+
         <div class="flex gap-2">
           <button
             type="button"
@@ -316,7 +438,7 @@ async function logout() {
           </button>
         </div>
       </form>
-    </section>
+    </Modal>
 
     <!-- Impostazioni -->
     <section class="rounded-2xl bg-white p-4 shadow-sm">
@@ -434,12 +556,12 @@ async function logout() {
                       Titolo <span class="text-gray-300">{{ schedaSortIcon('title') }}</span>
                     </button>
                   </th>
-                  <th class="w-12 px-1 py-2 text-center">
-                    <button class="font-semibold uppercase" @click="toggleSchedaSort('days')">
-                      Gg <span class="text-gray-300">{{ schedaSortIcon('days') }}</span>
+                  <th class="w-20 px-2 py-2">
+                    <button class="font-semibold uppercase" @click="toggleSchedaSort('updated_at')">
+                      Agg. <span class="text-gray-300">{{ schedaSortIcon('updated_at') }}</span>
                     </button>
                   </th>
-                  <th class="w-10 px-1 py-2"></th>
+                  <th class="w-16 px-1 py-2"></th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-gray-50">
@@ -466,10 +588,45 @@ async function logout() {
                       {{ s.title || 'Senza titolo' }}
                       <span v-if="s.archived" class="ml-1 rounded bg-gray-100 px-1 py-0.5 text-[10px] font-semibold text-gray-500">Disattivata</span>
                     </p>
-                    <p class="text-xs text-gray-400">Agg. {{ formatDate(s.updated_at) }}</p>
+                    <div v-if="s.goal || s.level" class="mt-0.5 flex flex-wrap gap-1">
+                      <span v-if="s.goal" class="rounded-full bg-brand/10 px-2 py-0.5 text-[10px] font-semibold capitalize text-brand">{{ s.goal }}</span>
+                      <span v-if="s.level" class="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold capitalize text-gray-500">{{ s.level }}</span>
+                    </div>
+                    <div class="mt-0.5 flex flex-wrap items-center gap-1">
+                      <span class="inline-flex items-center gap-1 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500" title="Creata">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3 w-3">
+                          <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
+                        </svg>
+                        {{ formatDate(s.created_at) }}
+                      </span>
+                      <span class="inline-flex items-center gap-1 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500" title="Giornate">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3 w-3">
+                          <rect x="3" y="4" width="18" height="17" rx="2" /><path d="M3 9h18M8 2v4M16 2v4" />
+                        </svg>
+                        {{ (s.days_json || []).length }}
+                      </span>
+                      <span class="inline-flex items-center gap-1 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500" title="Esercizi">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3 w-3">
+                          <path d="M6.5 6.5l11 11M4 7l3-3 3 3-3 3zM14 17l3-3 3 3-3 3zM3 12h2M19 12h2" />
+                        </svg>
+                        {{ schedaExCount(s) }}
+                      </span>
+                    </div>
                   </td>
-                  <td class="px-1 py-2 text-center text-gray-600">{{ (s.days_json || []).length }}</td>
+                  <td class="px-2 py-2 text-xs text-gray-500">{{ formatDate(s.updated_at) }}</td>
                   <td class="px-1 py-2">
+                    <div class="flex justify-end gap-0.5">
+                    <!-- visualizza -->
+                    <button
+                      class="rounded-lg p-1.5 text-gray-500 active:scale-90"
+                      title="Visualizza" aria-label="Visualizza"
+                      @click="openSchedaDetail(s)"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                           stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5">
+                        <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" /><circle cx="12" cy="12" r="3" />
+                      </svg>
+                    </button>
                     <!-- archivia / ripristina -->
                     <button
                       class="rounded-lg p-1.5 text-gray-500 active:scale-90"
@@ -486,6 +643,7 @@ async function logout() {
                         <path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" />
                       </svg>
                     </button>
+                    </div>
                   </td>
                 </tr>
               </tbody>
@@ -503,6 +661,21 @@ async function logout() {
         </template>
       </template>
     </section>
+
+    <!-- Visualizzazione scheda -->
+    <Modal :open="detailOpen" :title="detailScheda?.title || 'Scheda'" @close="detailOpen = false">
+      <div v-if="detailScheda">
+        <div v-if="detailScheda.goal || detailScheda.level" class="mb-3 flex flex-wrap gap-1">
+          <span v-if="detailScheda.goal" class="rounded-full bg-brand/10 px-2 py-0.5 text-[10px] font-semibold capitalize text-brand">{{ detailScheda.goal }}</span>
+          <span v-if="detailScheda.level" class="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold capitalize text-gray-500">{{ detailScheda.level }}</span>
+        </div>
+        <WorkoutDays
+          :days="detailScheda.days_json"
+          :catalog-by-id="catalogById"
+          :notes="detailScheda.notes || ''"
+        />
+      </div>
+    </Modal>
 
     <button
       class="w-full rounded-xl border border-rose-200 bg-rose-50 py-3 font-semibold text-rose-600 active:scale-95"

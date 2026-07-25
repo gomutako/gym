@@ -4,6 +4,8 @@
 import { ref, computed, watch, onMounted } from 'vue';
 import { api } from '@/lib/api';
 import { subStatus, SUB_STATUS_LABEL, formatDate } from '@/lib/subscriptions';
+import Modal from '@/components/Modal.vue';
+import Combobox from '@/components/Combobox.vue';
 
 const users = ref([]);
 const loading = ref(true);
@@ -11,6 +13,7 @@ const savingId = ref(null);
 const error = ref('');
 
 const roleLabel = { admin: 'Admin', trainer: 'Trainer', member: 'Member' };
+const roleOptions = Object.entries(roleLabel).map(([value, label]) => ({ value, label }));
 const roleRank = { admin: 0, trainer: 1, member: 2 };
 
 const badgeClass = {
@@ -256,19 +259,8 @@ onMounted(load);
     </template>
 
     <!-- Pannello modifica utente -->
-    <div
-      v-if="editUser"
-      class="fixed inset-0 z-30 flex items-end justify-center bg-black/40 p-4 sm:items-center"
-      @click.self="editUser = null"
-    >
-      <div class="max-h-[85vh] w-full max-w-sm space-y-3 overflow-y-auto rounded-2xl bg-white p-4 shadow-xl">
-        <div class="flex items-center justify-between">
-          <h2 class="font-semibold text-gray-900">{{ editUser.full_name || 'Utente' }}</h2>
-          <button class="rounded p-1 text-gray-400 active:scale-90" aria-label="Chiudi" @click="editUser = null">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                 stroke-linecap="round" class="h-5 w-5"><path d="M6 6l12 12M18 6L6 18" /></svg>
-          </button>
-        </div>
+    <Modal :open="!!editUser" :title="editUser?.full_name || 'Utente'" @close="editUser = null">
+      <div v-if="editUser" class="space-y-3">
 
         <div>
           <label class="mb-1 block text-xs font-medium text-gray-500">Email</label>
@@ -279,12 +271,14 @@ onMounted(load);
         </div>
         <div>
           <label class="mb-1 block text-xs font-medium text-gray-500">Ruolo</label>
-          <select
+          <Combobox
             v-model="editUser.role"
-            class="w-full rounded-lg border border-gray-300 px-2 py-2 text-sm focus:border-brand focus:outline-none"
-          >
-            <option v-for="(label, value) in roleLabel" :key="value" :value="value">{{ label }}</option>
-          </select>
+            :options="roleOptions"
+            :clearable="false"
+            dense
+            placeholder="Cerca ruolo…"
+            empty-text="Nessun ruolo"
+          />
         </div>
 
         <button
@@ -341,6 +335,6 @@ onMounted(load);
           </div>
         </div>
       </div>
-    </div>
+    </Modal>
   </div>
 </template>

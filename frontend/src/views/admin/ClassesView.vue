@@ -2,6 +2,8 @@
 // Admin: gestione palinsesto corsi — crea, modifica, elimina.
 import { ref, onMounted, computed } from 'vue';
 import { api } from '@/lib/api';
+import Modal from '@/components/Modal.vue';
+import Combobox from '@/components/Combobox.vue';
 
 const classes = ref([]);
 const trainers = ref([]);
@@ -9,15 +11,21 @@ const loading = ref(true);
 const saving = ref(false);
 const error = ref('');
 
-// Stato del form (editId null = creazione)
+// Stato del form (editId null = creazione), mostrato in un pop-up modale
 const editId = ref(null);
 const form = ref(emptyForm());
+const formOpen = ref(false);
 
 function emptyForm() {
   return { name: '', description: '', trainer_id: '', start_time: '', max_capacity: 10 };
 }
 
 const isEditing = computed(() => editId.value !== null);
+
+// Opzioni per la combobox trainer (vuoto = nessun trainer, via "svuota")
+const trainerOptions = computed(() =>
+  trainers.value.map((t) => ({ value: t.id, label: t.full_name }))
+);
 
 // Conversioni tra ISO (API) e input datetime-local
 function isoToLocalInput(iso) {
@@ -50,6 +58,13 @@ async function load() {
   }
 }
 
+function openCreate() {
+  editId.value = null;
+  form.value = emptyForm();
+  error.value = '';
+  formOpen.value = true;
+}
+
 function startEdit(c) {
   editId.value = c.id;
   form.value = {
@@ -59,10 +74,12 @@ function startEdit(c) {
     start_time: isoToLocalInput(c.start_time),
     max_capacity: c.max_capacity,
   };
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  error.value = '';
+  formOpen.value = true;
 }
 
-function resetForm() {
+function closeForm() {
+  formOpen.value = false;
   editId.value = null;
   form.value = emptyForm();
 }
@@ -83,7 +100,7 @@ async function submit() {
     } else {
       await api.post('/api/classes', payload);
     }
-    resetForm();
+    closeForm();
     await load();
   } catch (e) {
     error.value = e.message;
@@ -97,7 +114,7 @@ async function remove(id) {
   error.value = '';
   try {
     await api.del(`/api/classes/${id}`);
-    if (editId.value === id) resetForm();
+    if (editId.value === id) closeForm();
     await load();
   } catch (e) {
     error.value = e.message;
@@ -109,31 +126,52 @@ onMounted(load);
 
 <template>
   <div class="space-y-5">
-    <p v-if="error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{{ error }}</p>
+    <p v-if="error && !formOpen" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{{ error }}</p>
 
-    <!-- Form crea/modifica -->
-    <section class="rounded-2xl bg-white p-4 shadow-sm">
-      <h2 class="mb-3 font-semibold text-gray-900">
-        {{ isEditing ? 'Modifica corso' : 'Nuovo corso' }}
-      </h2>
+    <!-- Toolbar -->
+    <div class="flex justify-end">
+      <button
+        class="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white active:scale-95"
+        @click="openCreate"
+      >
+        + Nuovo corso
+      </button>
+    </div>
+
+    <!-- Form crea/modifica in pop-up -->
+    <Modal
+      :open="formOpen"
+      :title="isEditing ? 'Modifica corso' : 'Nuovo corso'"
+      @close="closeForm"
+    >
+      <p v-if="error" class="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{{ error }}</p>
       <form class="space-y-3" @submit.prevent="submit">
-        <input
-          v-model="form.name"
-          required placeholder="Nome corso"
-          class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand focus:outline-none"
-        />
-        <input
-          v-model="form.description"
-          placeholder="Descrizione (opzionale)"
-          class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand focus:outline-none"
-        />
-        <select
-          v-model="form.trainer_id"
-          class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand focus:outline-none"
-        >
-          <option value="">— nessun trainer —</option>
-          <option v-for="t in trainers" :key="t.id" :value="t.id">{{ t.full_name }}</option>
-        </select>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-gray-500">Nome corso</label>
+          <input
+            v-model="form.name"
+            required placeholder="Es. Spinning"
+            class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand focus:outline-none"
+          />
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-gray-500">Descrizione</label>
+          <input
+            v-model="form.description"
+            placeholder="Opzionale"
+            class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand focus:outline-none"
+          />
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-gray-500">Trainer</label>
+          <Combobox
+            v-model="form.trainer_id"
+            :options="trainerOptions"
+            dense
+            placeholder="Nessun trainer — cerca…"
+            empty-text="Nessun trainer trovato"
+          />
+        </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="mb-1 block text-xs font-medium text-gray-500">Data e ora</label>
@@ -155,28 +193,28 @@ onMounted(load);
 
         <div class="flex gap-2">
           <button
+            type="button"
+            class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-600"
+            @click="closeForm"
+          >
+            Annulla
+          </button>
+          <button
             type="submit" :disabled="saving"
             class="flex-1 rounded-lg bg-brand py-2 text-sm font-semibold text-white active:scale-95 disabled:opacity-60"
           >
             {{ saving ? 'Salvataggio…' : isEditing ? 'Aggiorna' : 'Crea corso' }}
           </button>
-          <button
-            v-if="isEditing" type="button"
-            class="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600"
-            @click="resetForm"
-          >
-            Annulla
-          </button>
         </div>
       </form>
-    </section>
+    </Modal>
 
     <!-- Lista corsi -->
     <section>
       <h2 class="mb-2 font-semibold text-gray-900">Corsi in programma</h2>
       <p v-if="loading" class="text-sm text-gray-400">Caricamento…</p>
       <p v-else-if="!classes.length" class="rounded-xl bg-white p-4 text-sm text-gray-400 shadow-sm">
-        Nessun corso. Creane uno qui sopra.
+        Nessun corso. Usa “+ Nuovo corso” per crearne uno.
       </p>
       <ul v-else class="space-y-2">
         <li v-for="c in classes" :key="c.id" class="rounded-xl bg-white p-4 shadow-sm">

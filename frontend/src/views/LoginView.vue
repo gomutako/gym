@@ -33,10 +33,37 @@ async function submit() {
     }
     router.push({ name: 'dashboard' });
   } catch (e) {
-    error.value = e.message || 'Si è verificato un errore';
+    error.value = authErrorMessage(e);
   } finally {
     loading.value = false;
   }
+}
+
+// Traduce gli errori di Supabase Auth in messaggi leggibili.
+// Necessario perché su errori di rete/gateway supabase-js incapsula l'errore
+// con un message inutile (es. la stringa "{}"), che altrimenti finisce a schermo.
+function authErrorMessage(e) {
+  // Errori di rete/gateway (server irraggiungibile, 5xx, fetch fallito)
+  if (e?.name === 'AuthRetryableFetchError' || e?.status >= 500 || e instanceof TypeError) {
+    return 'Impossibile contattare il server. Controlla la connessione e riprova.';
+  }
+
+  const byCode = {
+    invalid_credentials: 'Email o password non corretti.',
+    email_not_confirmed: 'Email non ancora confermata. Controlla la tua casella.',
+    user_already_exists: 'Esiste già un account con questa email.',
+    email_exists: 'Esiste già un account con questa email.',
+    weak_password: 'Password troppo debole: usa almeno 6 caratteri.',
+    over_email_send_rate_limit: 'Troppi tentativi. Attendi qualche minuto e riprova.',
+    validation_failed: 'Dati non validi. Controlla email e password.',
+  };
+  if (e?.code && byCode[e.code]) return byCode[e.code];
+
+  // message valido? (non vuoto e non un oggetto serializzato tipo "{}")
+  const msg = typeof e?.message === 'string' ? e.message.trim() : '';
+  if (msg && msg !== '{}' && msg !== '[object Object]') return msg;
+
+  return 'Si è verificato un errore. Riprova.';
 }
 
 function setMode(next) {
@@ -47,16 +74,28 @@ function setMode(next) {
 </script>
 
 <template>
-  <div class="flex min-h-screen items-center justify-center bg-gray-50 px-6">
-    <div class="w-full max-w-sm">
-      <div class="mb-8 text-center">
-        <div class="text-4xl">🏋️</div>
-        <h1 class="mt-2 text-2xl font-bold text-gray-900">Gym Manager</h1>
+  <div class="relative flex min-h-screen items-center justify-center overflow-hidden bg-gray-50 px-6 py-10">
+    <!-- Decorazioni sfocate (aurora) -->
+    <div class="pointer-events-none absolute -left-24 -top-24 h-72 w-72 rounded-full bg-brand/30 blur-3xl"></div>
+    <div class="pointer-events-none absolute -bottom-24 -right-24 h-72 w-72 rounded-full bg-indigo-400/30 blur-3xl"></div>
+
+    <div class="relative w-full max-w-sm">
+      <!-- Logo + titolo -->
+      <div class="mb-6 text-center">
+        <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-brand to-indigo-500 shadow-lg shadow-brand/30">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+               stroke-linecap="round" stroke-linejoin="round" class="h-8 w-8 text-white">
+            <path d="M4 9v6M7 7v10M17 7v10M20 9v6M7 12h10" />
+          </svg>
+        </div>
+        <h1 class="mt-4 text-2xl font-bold tracking-tight text-gray-900">Gym Manager</h1>
         <p class="text-sm text-gray-500">
           {{ mode === 'login' ? 'Accedi al tuo account' : mode === 'register' ? 'Crea un nuovo account' : 'Recupera la password' }}
         </p>
       </div>
 
+      <!-- Card form -->
+      <div class="rounded-3xl bg-white p-6 shadow-xl shadow-gray-900/5 ring-1 ring-gray-100">
       <p v-if="mode === 'forgot' && resetSent" class="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-600">
         Se l'email è registrata, riceverai un link per reimpostare la password. Controlla anche lo spam.
       </p>
@@ -144,7 +183,7 @@ function setMode(next) {
         <button
           type="submit"
           :disabled="loading"
-          class="w-full rounded-xl bg-brand py-3 font-semibold text-white transition active:scale-95 disabled:opacity-60"
+          class="w-full rounded-xl bg-gradient-to-r from-brand to-indigo-500 py-3 font-semibold text-white shadow-lg shadow-brand/25 transition hover:brightness-105 active:scale-95 disabled:opacity-60"
         >
           {{ loading ? 'Attendere…' : mode === 'login' ? 'Accedi' : mode === 'register' ? 'Registrati' : 'Invia link di recupero' }}
         </button>
@@ -162,6 +201,7 @@ function setMode(next) {
           {{ mode === 'login' ? 'Registrati' : 'Accedi' }}
         </button>
       </p>
+      </div>
     </div>
   </div>
 </template>

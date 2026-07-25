@@ -38,12 +38,21 @@ export default async function exercisesRoutes(fastify) {
           required: ['name'],
           properties: {
             name: { type: 'string', minLength: 1 },
-            muscle_group: { type: 'string' },
+            muscle_group: { type: 'string' }, // muscolo primario
             description: { type: 'string' }, // tecnica/esecuzione
             load_type: { type: 'string', enum: ['weight', 'level'] }, // peso kg vs livello
             has_incline: { type: 'boolean' }, // registra anche la pendenza % (es. tapis roulant)
             video_url: { type: 'string' }, // link video esecuzione (opzionale)
-            image_path: { type: 'string' },
+            image_path: { type: 'string' }, // copertina (thumbnail)
+            image_paths: { type: 'array', items: { type: 'string' } }, // tutte le immagini (carousel)
+            // --- Metadati aggiuntivi (allineati alla fonte free-exercise-db) ---
+            equipment: { type: 'string' }, // attrezzatura (testo libero)
+            category: { type: 'string' }, // categoria (testo libero)
+            force: { type: 'string', enum: ['spinta', 'trazione', 'statico'] },
+            level: { type: 'string', enum: ['principiante', 'intermedio', 'avanzato'] },
+            mechanic: { type: 'string', enum: ['composto', 'isolamento'] },
+            secondary_muscles: { type: 'array', items: { type: 'string' } }, // muscoli secondari
+            instructions: { type: 'array', items: { type: 'string' } }, // passi di esecuzione
           },
         },
       },
@@ -84,6 +93,15 @@ export default async function exercisesRoutes(fastify) {
             has_incline: { type: 'boolean' },
             video_url: { type: ['string', 'null'] },
             image_path: { type: ['string', 'null'] },
+            image_paths: { type: 'array', items: { type: 'string' } }, // [] per svuotare
+            // --- Metadati aggiuntivi (null per svuotare) ---
+            equipment: { type: ['string', 'null'] },
+            category: { type: ['string', 'null'] },
+            force: { type: ['string', 'null'], enum: ['spinta', 'trazione', 'statico', null] },
+            level: { type: ['string', 'null'], enum: ['principiante', 'intermedio', 'avanzato', null] },
+            mechanic: { type: ['string', 'null'], enum: ['composto', 'isolamento', null] },
+            secondary_muscles: { type: 'array', items: { type: 'string' } }, // [] per svuotare
+            instructions: { type: 'array', items: { type: 'string' } }, // [] per svuotare
           },
         },
       },

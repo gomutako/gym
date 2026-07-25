@@ -37,12 +37,18 @@ export default async function membersRoutes(fastify) {
     async (request, reply) => {
       const { data, error } = await supabaseAdmin
         .from('profiles')
-        .select('id, full_name, subscription_end_date')
+        .select('id, full_name, phone, avatar_path, gender, birth_date, height_cm, weight_kg, notes, subscription_end_date')
         .eq('role', 'member')
         .order('full_name', { ascending: true });
 
       if (error) return reply.code(500).send({ error: error.message });
-      return data;
+
+      // Arricchisci con l'email (che sta in auth.users, non in profiles) per l'anagrafica
+      const { data: authList } = await supabaseAdmin.auth.admin.listUsers();
+      const emailById = Object.fromEntries(
+        (authList?.users || []).map((u) => [u.id, u.email])
+      );
+      return data.map((m) => ({ ...m, email: emailById[m.id] || null }));
     }
   );
 
