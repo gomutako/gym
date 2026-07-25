@@ -7,6 +7,7 @@ import { ref, reactive, computed, onMounted, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api } from '@/lib/api';
 import ImageCarousel from '@/components/ImageCarousel.vue';
+import * as healthkit from '@/lib/healthkit';
 
 // Immagini di un esercizio del catalogo: tutte (image_paths) o la sola copertina
 const exerciseImages = (ex) =>
@@ -21,6 +22,12 @@ const loading = ref(true);
 const error = ref('');
 const completing = ref(false);
 
+const hkSupported = healthkit.isSupported();
+const liveHR = ref(null);         // bpm corrente
+const liveKcal = ref(null);       // kcal attive accumulate (ultimo sample cumulativo)
+const lastSampleAt = ref(null);   // per rilevare "in attesa Watch"
+let hkUnsub = null;
+
 const index = ref(0);
 const direction = ref('next');
 
@@ -30,6 +37,13 @@ const catalogById = computed(() =>
 
 const log = computed(() => session.value?.exercises_log || []);
 const current = computed(() => log.value[index.value] || null);
+
+const saved = computed(() => session.value?.biometrics_json || null);
+const badgeHR = computed(() => (hkSupported && !session.value?.completed_at) ? liveHR.value : saved.value?.hr_avg ?? null);
+const badgeKcal = computed(() => (hkSupported && !session.value?.completed_at) ? liveKcal.value : saved.value?.active_kcal ?? null);
+const hrStale = computed(() =>
+  hkSupported && !session.value?.completed_at &&
+  (!lastSampleAt.value || Date.now() - lastSampleAt.value > 30000));
 
 function fmtDateTime(iso) {
   if (!iso) return '';
@@ -119,7 +133,11 @@ function restState(exI, rowI) {
   return v > 0 ? 'resting' : 'over';
 }
 
-onUnmounted(() => Object.values(intervals).forEach((id) => id && clearInterval(id)));
+onUnmounted(() => {
+  Object.values(intervals).forEach((id) => id && clearInterval(id));
+  if (hkUnsub) hkUnsub();
+  if (hkSupported) healthkit.stop();
+});
 
 // --- Persistenza (salva tutto il log esercizi) ---
 async function persist() {
@@ -182,9 +200,16 @@ async function complete() {
     // Salva ANCHE lo stato corrente (pesi/reps eventualmente modificati e non
     // ancora persistiti), non solo il completamento: così il prefill della
     // prossima sessione ritrova i valori impostati.
+    let biometrics_json;
+    if (hkSupported) {
+      await healthkit.stop();
+      if (hkUnsub) { hkUnsub(); hkUnsub = null; }
+      biometrics_json = await healthkit.summary(session.value.started_at, new Date().toISOString());
+    }
     await api.patch(`/api/sessions/${session.value.id}`, {
       exercises_log: session.value.exercises_log,
       completed_at: new Date().toISOString(),
+      ...(biometrics_json ? { biometrics_json } : {}),
     });
     router.push({ name: 'training' });
   } catch (e) {
@@ -200,6 +225,17 @@ onMounted(async () => {
       api.get(`/api/sessions/${route.params.id}`),
       api.get('/api/exercises'),
     ]);
+    if (hkSupported && session.value && !session.value.completed_at) {
+      const auth = await healthkit.requestAuth();
+      if (auth.granted) {
+        hkUnsub = healthkit.onSample((s) => {
+          lastSampleAt.value = Date.now();
+          if (s.type === 'heartRate') liveHR.value = Math.round(s.value);
+          else if (s.type === 'activeEnergy') liveKcal.value = Math.round((liveKcal.value || 0) + s.value);
+        });
+        await healthkit.start();
+      }
+    }
   } catch (e) {
     error.value = e.message;
   } finally {
@@ -227,6 +263,18 @@ onMounted(async () => {
               :style="{ width: (log.length ? (doneCount / log.length) * 100 : 0) + '%' }"></div>
           </div>
           <span class="text-sm text-gray-500">{{ doneCount }}/{{ log.length }}</span>
+        </div>
+
+        <div v-if="hkSupported || saved" class="mt-3 flex flex-wrap gap-2">
+          <span class="inline-flex items-center gap-1 rounded-full bg-red-50 px-3 py-1 text-sm font-medium text-red-600">
+            ❤️ {{ badgeHR != null ? badgeHR + ' bpm' : '—' }}
+          </span>
+          <span class="inline-flex items-center gap-1 rounded-full bg-orange-50 px-3 py-1 text-sm font-medium text-orange-600">
+            🔥 {{ badgeKcal != null ? badgeKcal + ' kcal' : '—' }}
+          </span>
+          <span v-if="hrStale" class="inline-flex items-center rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-500">
+            Avvia un allenamento sul Watch
+          </span>
         </div>
       </div>
 
