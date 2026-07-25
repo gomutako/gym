@@ -26,7 +26,9 @@ const hkSupported = healthkit.isSupported();
 const liveHR = ref(null);         // bpm corrente
 const liveKcal = ref(null);       // kcal attive accumulate (ultimo sample cumulativo)
 const lastSampleAt = ref(null);   // per rilevare "in attesa Watch"
+const now = ref(Date.now());      // tick periodico per rendere reattivo hrStale
 let hkUnsub = null;
+let hkTickInterval = null;
 
 const index = ref(0);
 const direction = ref('next');
@@ -43,7 +45,7 @@ const badgeHR = computed(() => (hkSupported && !session.value?.completed_at) ? l
 const badgeKcal = computed(() => (hkSupported && !session.value?.completed_at) ? liveKcal.value : saved.value?.active_kcal ?? null);
 const hrStale = computed(() =>
   hkSupported && !session.value?.completed_at &&
-  (!lastSampleAt.value || Date.now() - lastSampleAt.value > 30000));
+  (!lastSampleAt.value || now.value - lastSampleAt.value > 30000));
 
 function fmtDateTime(iso) {
   if (!iso) return '';
@@ -135,6 +137,7 @@ function restState(exI, rowI) {
 
 onUnmounted(() => {
   Object.values(intervals).forEach((id) => id && clearInterval(id));
+  if (hkTickInterval) clearInterval(hkTickInterval);
   if (hkUnsub) hkUnsub();
   if (hkSupported) healthkit.stop();
 });
@@ -235,6 +238,8 @@ onMounted(async () => {
         });
         await healthkit.start();
       }
+      // Tick periodico: rende hrStale reattivo (Date.now() da solo non è una dipendenza Vue)
+      hkTickInterval = setInterval(() => { now.value = Date.now(); }, 5000);
     }
   } catch (e) {
     error.value = e.message;
