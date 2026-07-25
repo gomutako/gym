@@ -19,6 +19,12 @@ export const useAuthStore = defineStore('auth', () => {
   const lastName = computed(() => profile.value?.last_name || '');
   const phone = computed(() => profile.value?.phone || '');
   const avatarPath = computed(() => profile.value?.avatar_path || null);
+  // Dati anagrafici/fisici
+  const gender = computed(() => profile.value?.gender || '');
+  const birthDate = computed(() => profile.value?.birth_date || '');
+  const heightCm = computed(() => profile.value?.height_cm ?? null);
+  const weightKg = computed(() => profile.value?.weight_kg ?? null);
+  const notes = computed(() => profile.value?.notes || '');
 
   // Abbonamento attivo se la data di fine è oggi o futura
   const isSubscriptionActive = computed(() => {
@@ -112,6 +118,7 @@ export const useAuthStore = defineStore('auth', () => {
   return {
     user, profile, loading,
     isLoggedIn, role, fullName, firstName, lastName, phone, avatarPath, isSubscriptionActive,
+    gender, birthDate, heightCm, weightKg, notes,
     init, fetchProfile, login, register, logout, updateProfile,
     sendPasswordReset, updatePassword,
   };

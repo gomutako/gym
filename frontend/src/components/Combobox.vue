@@ -18,9 +18,13 @@ const emit = defineEmits(['update:modelValue', 'change']);
 
 const root = ref(null);
 const input = ref(null);
+const listRef = ref(null);
 const open = ref(false);
 const query = ref('');       // testo digitato mentre la lista è aperta
 const highlighted = ref(-1);
+// La lista è teleportata nel body (posizione fixed) per non essere ritagliata
+// da contenitori con overflow (es. il box scrollabile di una modale).
+const listStyle = ref({});
 
 const selected = computed(() => props.options.find((o) => o.value === props.modelValue) || null);
 const selectedLabel = computed(() => selected.value?.label || '');
@@ -38,11 +42,33 @@ const filtered = computed(() => {
 // Il campo mostra la selezione quando è chiuso, il testo digitato quando è aperto
 const display = computed(() => (open.value ? query.value : selectedLabel.value));
 
+// Allinea la lista (fixed) all'input: larghezza uguale, sotto se c'è spazio,
+// altrimenti sopra; l'altezza è limitata allo spazio disponibile.
+function updatePosition() {
+  const el = input.value;
+  if (!el) return;
+  const r = el.getBoundingClientRect();
+  const gap = 4;
+  const maxList = 256; // deve combaciare con max-h-64
+  const spaceBelow = window.innerHeight - r.bottom - gap;
+  const spaceAbove = r.top - gap;
+  const style = { left: `${r.left}px`, width: `${r.width}px` };
+  if (spaceBelow >= Math.min(maxList, 160) || spaceBelow >= spaceAbove) {
+    style.top = `${r.bottom + gap}px`;
+    style.maxHeight = `${Math.min(maxList, spaceBelow)}px`;
+  } else {
+    style.bottom = `${window.innerHeight - r.top + gap}px`;
+    style.maxHeight = `${Math.min(maxList, spaceAbove)}px`;
+  }
+  listStyle.value = style;
+}
+
 function openList() {
   if (open.value) return;
   open.value = true;
   query.value = '';
   highlighted.value = filtered.value.findIndex((o) => o.value === props.modelValue);
+  updatePosition();
 }
 
 function closeList() {
@@ -84,7 +110,17 @@ function onEnter() {
 }
 
 function onClickOutside(e) {
-  if (root.value && !root.value.contains(e.target)) closeList();
+  // La lista è teleportata fuori dal root: va esclusa a parte dal "click fuori".
+  if (root.value?.contains(e.target)) return;
+  if (listRef.value?.contains(e.target)) return;
+  closeList();
+}
+
+// La lista è fixed: mentre è aperta va riallineata se la pagina/un contenitore
+// scrolla o la finestra cambia dimensione (capture=true intercetta anche gli
+// scroll interni, es. il box della modale).
+function onReposition() {
+  if (open.value) updatePosition();
 }
 
 // Se le opzioni cambiano mentre si filtra, l'indice evidenziato può uscire dal range
@@ -92,8 +128,16 @@ watch(filtered, (list) => {
   if (highlighted.value >= list.length) highlighted.value = list.length ? 0 : -1;
 });
 
-onMounted(() => document.addEventListener('mousedown', onClickOutside));
-onBeforeUnmount(() => document.removeEventListener('mousedown', onClickOutside));
+onMounted(() => {
+  document.addEventListener('mousedown', onClickOutside);
+  window.addEventListener('scroll', onReposition, true);
+  window.addEventListener('resize', onReposition);
+});
+onBeforeUnmount(() => {
+  document.removeEventListener('mousedown', onClickOutside);
+  window.removeEventListener('scroll', onReposition, true);
+  window.removeEventListener('resize', onReposition);
+});
 </script>
 
 <template>
@@ -143,10 +187,13 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onClickOutside))
       </div>
     </div>
 
+    <Teleport to="body">
     <ul
       v-if="open"
+      ref="listRef"
       role="listbox"
-      class="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border border-gray-200 bg-white py-1 shadow-lg"
+      :style="listStyle"
+      class="fixed z-50 max-h-64 overflow-y-auto rounded-xl border border-gray-200 bg-white py-1 shadow-lg"
     >
       <li v-if="!filtered.length" class="px-4 py-2 text-sm text-gray-400">{{ emptyText }}</li>
       <li
@@ -178,5 +225,6 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onClickOutside))
         </span>
       </li>
     </ul>
+    </Teleport>
   </div>
 </template>

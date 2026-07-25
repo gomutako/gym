@@ -4,9 +4,10 @@ import { ref, onMounted } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useAuthStore } from '@/stores/auth';
 import { api } from '@/lib/api';
+import IdentityCard from '@/components/IdentityCard.vue';
 
 const auth = useAuthStore();
-const { fullName, user } = storeToRefs(auth);
+const { user } = storeToRefs(auth);
 
 const classes = ref([]);
 const loading = ref(true);
@@ -50,7 +51,7 @@ onMounted(async () => {
 
 <template>
   <div class="space-y-5">
-    <p class="text-gray-600">Ciao, <span class="font-semibold">{{ fullName }}</span> 💪</p>
+    <IdentityCard />
 
     <section>
       <h2 class="mb-2 font-semibold text-gray-900">Le mie classi</h2>

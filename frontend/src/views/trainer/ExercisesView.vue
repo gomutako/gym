@@ -7,6 +7,8 @@
 import { ref, computed, watch, onMounted } from 'vue';
 import { api } from '@/lib/api';
 import { exerciseImageUrl, uploadExerciseImage } from '@/lib/storage';
+import Modal from '@/components/Modal.vue';
+import Combobox from '@/components/Combobox.vue';
 
 const exercises = ref([]);
 const loading = ref(true);
@@ -21,25 +23,75 @@ const emptyForm = () => ({
   load_type: 'weight',
   has_incline: false,
   video_url: '',
+  // Metadati aggiuntivi (allineati alla fonte free-exercise-db)
+  equipment: '',
+  category: '',
+  force: '',
+  level: '',
+  mechanic: '',
+  secondary_muscles: '', // input come lista separata da virgole
+  instructions: '',      // input come passi separati da a-capo
 });
 const form = ref(emptyForm());
+
+// Opzioni per le combobox del form (sostituiscono i vecchi <select>)
+const loadTypeOptions = [
+  { value: 'weight', label: 'Peso (kg) — es. panca, squat' },
+  { value: 'level', label: 'Livello di difficoltà — es. tapis roulant' },
+];
+const levelOptions = [
+  { value: 'principiante', label: 'Principiante' },
+  { value: 'intermedio', label: 'Intermedio' },
+  { value: 'avanzato', label: 'Avanzato' },
+];
+const mechanicOptions = [
+  { value: 'composto', label: 'Composto' },
+  { value: 'isolamento', label: 'Isolamento' },
+];
+const forceOptions = [
+  { value: 'spinta', label: 'Spinta' },
+  { value: 'trazione', label: 'Trazione' },
+  { value: 'statico', label: 'Statico' },
+];
+
 const editingId = ref(null);       // null = creazione
 const formOpen = ref(false);
-const file = ref(null);            // nuova immagine scelta
-const preview = ref(null);         // anteprima locale
-const currentImage = ref(null);    // image_path già salvato (in modifica)
 
-function onFile(e) {
-  file.value = e.target.files[0] || null;
-  preview.value = file.value ? URL.createObjectURL(file.value) : null;
+// Editor immagini: lista ordinata di elementi. Ognuno è o un'immagine GIÀ salvata
+// (path nel bucket) o un FILE nuovo ancora da caricare (con anteprima locale).
+// La prima immagine della lista è la copertina (image_path).
+let imgKey = 0;
+const imageItems = ref([]); // [{ key, path?, file?, url }]
+
+function addImageFiles(e) {
+  for (const f of e.target.files) {
+    imageItems.value.push({ key: imgKey++, file: f, url: URL.createObjectURL(f) });
+  }
+  e.target.value = ''; // consente di riselezionare lo stesso file
+}
+
+function removeImage(i) {
+  const [rm] = imageItems.value.splice(i, 1);
+  if (rm?.file) URL.revokeObjectURL(rm.url); // libera l'anteprima locale
+}
+
+function moveImage(i, delta) {
+  const j = i + delta;
+  if (j < 0 || j >= imageItems.value.length) return;
+  const arr = imageItems.value;
+  [arr[i], arr[j]] = [arr[j], arr[i]];
+}
+
+// Libera le anteprime locali dei file non ancora caricati
+function revokeImagePreviews() {
+  for (const it of imageItems.value) if (it.file) URL.revokeObjectURL(it.url);
 }
 
 function openCreate() {
   editingId.value = null;
   form.value = emptyForm();
-  file.value = null;
-  preview.value = null;
-  currentImage.value = null;
+  revokeImagePreviews();
+  imageItems.value = [];
   formOpen.value = true;
 }
 
@@ -52,18 +104,25 @@ function openEdit(ex) {
     load_type: ex.load_type || 'weight',
     has_incline: !!ex.has_incline,
     video_url: ex.video_url || '',
+    equipment: ex.equipment || '',
+    category: ex.category || '',
+    force: ex.force || '',
+    level: ex.level || '',
+    mechanic: ex.mechanic || '',
+    secondary_muscles: (ex.secondary_muscles || []).join(', '),
+    instructions: (ex.instructions || []).join('\n'),
   };
-  file.value = null;
-  preview.value = null;
-  currentImage.value = ex.image_path || null;
+  revokeImagePreviews();
+  const paths = ex.image_paths?.length ? ex.image_paths : ex.image_path ? [ex.image_path] : [];
+  imageItems.value = paths.map((p) => ({ key: imgKey++, path: p, url: exerciseImageUrl(p) }));
   formOpen.value = true;
 }
 
 function closeForm() {
   formOpen.value = false;
   editingId.value = null;
-  file.value = null;
-  preview.value = null;
+  revokeImagePreviews();
+  imageItems.value = [];
 }
 
 async function load() {
@@ -81,9 +140,25 @@ async function save() {
   error.value = '';
   saving.value = true;
   try {
-    // 1. Carica l'eventuale nuova immagine su Storage e ottieni il path
-    let image_path = null;
-    if (file.value) image_path = await uploadExerciseImage(file.value);
+    // 1. Risolvi le immagini nell'ordine scelto: i file nuovi vengono caricati,
+    //    quelli già salvati mantengono il loro path. La prima è la copertina.
+    const image_paths = [];
+    for (const it of imageItems.value) {
+      image_paths.push(it.path ?? (await uploadExerciseImage(it.file)));
+    }
+    const image_path = image_paths[0] ?? null;
+
+    // "muscolo1, muscolo2" -> ['muscolo1', 'muscolo2'] (vuoto -> [])
+    const secondary = form.value.secondary_muscles
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    // istruzioni: un passo per riga
+    const steps = form.value.instructions
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean);
 
     if (editingId.value) {
       // In modifica: i campi opzionali vuoti diventano null (svuotamento esplicito)
@@ -94,7 +169,15 @@ async function save() {
         load_type: form.value.load_type,
         has_incline: form.value.has_incline,
         video_url: form.value.video_url || null,
-        ...(image_path ? { image_path } : {}),
+        equipment: form.value.equipment || null,
+        category: form.value.category || null,
+        force: form.value.force || null,
+        level: form.value.level || null,
+        mechanic: form.value.mechanic || null,
+        secondary_muscles: secondary,
+        instructions: steps,
+        image_path, // copertina (o null se nessuna immagine)
+        image_paths, // elenco ordinato completo (carousel)
       });
     } else {
       await api.post('/api/exercises', {
@@ -104,7 +187,14 @@ async function save() {
         load_type: form.value.load_type,
         has_incline: form.value.has_incline,
         video_url: form.value.video_url || undefined,
-        image_path: image_path || undefined,
+        equipment: form.value.equipment || undefined,
+        category: form.value.category || undefined,
+        force: form.value.force || undefined,
+        level: form.value.level || undefined,
+        mechanic: form.value.mechanic || undefined,
+        ...(secondary.length ? { secondary_muscles: secondary } : {}),
+        ...(steps.length ? { instructions: steps } : {}),
+        ...(image_path ? { image_path, image_paths } : {}),
       });
     }
 
@@ -130,10 +220,27 @@ async function remove(ex) {
 
 // --- Ricerca / ordinamento / paginazione ---
 const search = ref('');
+const groupFilter = ref(''); // '' = tutti
+const equipmentFilter = ref('');
+const levelFilter = ref('');
+const mechanicFilter = ref('');
 const sortKey = ref('name');
 const sortDir = ref('asc');
 const page = ref(1);
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 20;
+
+// Opzioni distinte dal catalogo per i filtri combobox
+const cap = (v) => v[0].toUpperCase() + v.slice(1);
+const LEVEL_RANK = { principiante: 0, intermedio: 1, avanzato: 2 };
+const distinctOptions = (key, sorter) =>
+  [...new Set(exercises.value.map((e) => e[key]).filter(Boolean))]
+    .sort(sorter)
+    .map((v) => ({ value: v, label: cap(v) }));
+
+const groupFilterOptions = computed(() => distinctOptions('muscle_group', (a, b) => a.localeCompare(b, 'it')));
+const equipmentFilterOptions = computed(() => distinctOptions('equipment', (a, b) => a.localeCompare(b, 'it')));
+const levelFilterOptions = computed(() => distinctOptions('level', (a, b) => (LEVEL_RANK[a] ?? 9) - (LEVEL_RANK[b] ?? 9)));
+const mechanicFilterOptions = computed(() => distinctOptions('mechanic', (a, b) => a.localeCompare(b, 'it')));
 
 function toggleSort(key) {
   if (sortKey.value === key) {
@@ -146,12 +253,17 @@ function toggleSort(key) {
 
 const filtered = computed(() => {
   const q = search.value.trim().toLowerCase();
-  if (!q) return exercises.value;
-  return exercises.value.filter((ex) =>
-    [ex.name, ex.muscle_group, ex.description]
+  return exercises.value.filter((ex) => {
+    if (groupFilter.value && ex.muscle_group !== groupFilter.value) return false;
+    if (equipmentFilter.value && ex.equipment !== equipmentFilter.value) return false;
+    if (levelFilter.value && ex.level !== levelFilter.value) return false;
+    if (mechanicFilter.value && ex.mechanic !== mechanicFilter.value) return false;
+    if (!q) return true;
+    return [ex.name, ex.muscle_group, ex.description, ex.equipment, ex.category,
+      ...(ex.secondary_muscles || [])]
       .filter(Boolean)
-      .some((v) => v.toLowerCase().includes(q))
-  );
+      .some((v) => v.toLowerCase().includes(q));
+  });
 });
 
 const sorted = computed(() =>
@@ -173,7 +285,7 @@ const rangeFrom = computed(() => (sorted.value.length ? (page.value - 1) * PAGE_
 const rangeTo = computed(() => Math.min(page.value * PAGE_SIZE, sorted.value.length));
 
 // Filtro/ordinamento cambiano l'insieme: torna alla prima pagina
-watch([search, sortKey, sortDir], () => { page.value = 1; });
+watch([search, groupFilter, equipmentFilter, levelFilter, mechanicFilter, sortKey, sortDir], () => { page.value = 1; });
 // Dopo un'eliminazione la pagina corrente può non esistere più
 watch(pageCount, (n) => { if (page.value > n) page.value = n; });
 
@@ -189,10 +301,10 @@ onMounted(load);
   <div class="space-y-4">
     <p v-if="error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{{ error }}</p>
 
-    <!-- Toolbar: ricerca + nuovo -->
+    <!-- Toolbar: ricerca + filtro gruppo + nuovo -->
     <div class="flex gap-2">
       <input
-        v-model="search" type="search" placeholder="Cerca nome, gruppo, descrizione…"
+        v-model="search" type="search" placeholder="Cerca…"
         class="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand focus:outline-none"
       />
       <button
@@ -202,35 +314,51 @@ onMounted(load);
         + Nuovo
       </button>
     </div>
+    <!-- Filtri -->
+    <div class="grid grid-cols-2 gap-2">
+      <Combobox v-model="groupFilter" :options="groupFilterOptions" dense placeholder="Tutti i gruppi" empty-text="Nessun gruppo" />
+      <Combobox v-model="equipmentFilter" :options="equipmentFilterOptions" dense placeholder="Tutte le attrezzature" empty-text="Nessuna attrezzatura" />
+      <Combobox v-model="levelFilter" :options="levelFilterOptions" dense placeholder="Tutti i livelli" empty-text="Nessun livello" />
+      <Combobox v-model="mechanicFilter" :options="mechanicFilterOptions" dense placeholder="Tutte le meccaniche" empty-text="Nessuna meccanica" />
+    </div>
 
     <!-- Form nuovo / modifica esercizio -->
-    <section v-if="formOpen" class="rounded-2xl bg-white p-4 shadow-sm">
-      <h2 class="mb-3 font-semibold text-gray-900">
-        {{ editingId ? 'Modifica esercizio' : 'Nuovo esercizio' }}
-      </h2>
+    <Modal
+      :open="formOpen"
+      :title="editingId ? 'Modifica esercizio' : 'Nuovo esercizio'"
+      @close="closeForm"
+    >
       <form class="space-y-3" @submit.prevent="save">
-        <input
-          v-model="form.name" required placeholder="Nome esercizio"
-          class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand focus:outline-none"
-        />
-        <input
-          v-model="form.muscle_group" placeholder="Gruppo muscolare (opzionale)"
-          class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand focus:outline-none"
-        />
-        <textarea
-          v-model="form.description" rows="3"
-          placeholder="Descrizione esecuzione / tecnica (opzionale)"
-          class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand focus:outline-none"
-        ></textarea>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-gray-500">Nome esercizio</label>
+          <input
+            v-model="form.name" required placeholder="Es. Panca piana"
+            class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand focus:outline-none"
+          />
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-gray-500">Gruppo muscolare</label>
+          <input
+            v-model="form.muscle_group" placeholder="Muscolo primario (opzionale)"
+            class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand focus:outline-none"
+          />
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-gray-500">Descrizione</label>
+          <textarea
+            v-model="form.description" rows="3"
+            placeholder="Esecuzione / tecnica (opzionale)"
+            class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand focus:outline-none"
+          ></textarea>
+        </div>
         <div>
           <label class="mb-1 block text-xs font-medium text-gray-500">Cosa si registra per serie</label>
-          <select
+          <Combobox
             v-model="form.load_type"
-            class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand focus:outline-none"
-          >
-            <option value="weight">Peso (kg) — es. panca, squat</option>
-            <option value="level">Livello di difficoltà — es. tapis roulant</option>
-          </select>
+            :options="loadTypeOptions"
+            :clearable="false"
+            dense
+          />
         </div>
         <label class="flex items-center gap-2 text-sm text-gray-700">
           <input
@@ -239,21 +367,108 @@ onMounted(load);
           />
           Registra anche la pendenza (%) — es. tapis roulant
         </label>
-        <input
-          v-model="form.video_url" type="url" placeholder="URL video esecuzione (opzionale, es. YouTube)"
-          class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand focus:outline-none"
-        />
-
-        <div class="flex items-center gap-3">
-          <label class="cursor-pointer rounded-lg border border-dashed border-gray-300 px-4 py-2 text-sm text-gray-500">
-            📎 Immagine
-            <input type="file" accept="image/*" class="hidden" @change="onFile" />
-          </label>
-          <img v-if="preview" :src="preview" class="h-14 w-14 rounded-lg object-cover" />
-          <img
-            v-else-if="currentImage" :src="exerciseImageUrl(currentImage)"
-            class="h-14 w-14 rounded-lg object-cover" alt=""
+        <div>
+          <label class="mb-1 block text-xs font-medium text-gray-500">Video esecuzione</label>
+          <input
+            v-model="form.video_url" type="url" placeholder="URL (opzionale, es. YouTube)"
+            class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand focus:outline-none"
           />
+        </div>
+
+        <!-- Metadati aggiuntivi -->
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="mb-1 block text-xs font-medium text-gray-500">Attrezzatura</label>
+            <input
+              v-model="form.equipment" placeholder="Es. Bilanciere"
+              class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand focus:outline-none"
+            />
+          </div>
+          <div>
+            <label class="mb-1 block text-xs font-medium text-gray-500">Categoria</label>
+            <input
+              v-model="form.category" placeholder="Es. forza"
+              class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand focus:outline-none"
+            />
+          </div>
+        </div>
+        <div class="grid grid-cols-3 gap-3">
+          <div>
+            <label class="mb-1 block text-xs font-medium text-gray-500">Livello</label>
+            <Combobox v-model="form.level" :options="levelOptions" dense placeholder="—" empty-text="—" />
+          </div>
+          <div>
+            <label class="mb-1 block text-xs font-medium text-gray-500">Meccanica</label>
+            <Combobox v-model="form.mechanic" :options="mechanicOptions" dense placeholder="—" empty-text="—" />
+          </div>
+          <div>
+            <label class="mb-1 block text-xs font-medium text-gray-500">Sforzo</label>
+            <Combobox v-model="form.force" :options="forceOptions" dense placeholder="—" empty-text="—" />
+          </div>
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-gray-500">Muscoli secondari</label>
+          <input
+            v-model="form.secondary_muscles"
+            placeholder="Separati da virgola (opzionale)"
+            class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand focus:outline-none"
+          />
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-gray-500">Istruzioni</label>
+          <textarea
+            v-model="form.instructions" rows="4"
+            placeholder="Un passo per riga (opzionale)"
+            class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand focus:outline-none"
+          ></textarea>
+        </div>
+
+        <div>
+          <label class="mb-1 block text-xs font-medium text-gray-500">Immagini</label>
+          <p class="mb-2 text-[11px] text-gray-400">
+            La prima è la copertina. Usa le frecce per riordinare, la ✕ per eliminare.
+          </p>
+          <div class="flex flex-wrap gap-2">
+            <div
+              v-for="(img, i) in imageItems" :key="img.key"
+              class="relative h-20 w-20 overflow-hidden rounded-lg bg-gray-100"
+            >
+              <img :src="img.url" class="h-full w-full object-cover" alt="" />
+              <span
+                v-if="i === 0"
+                class="absolute left-0 top-0 rounded-br bg-brand px-1 py-0.5 text-[9px] font-semibold text-white"
+              >
+                Copertina
+              </span>
+              <button
+                type="button" aria-label="Elimina immagine"
+                class="absolute right-0.5 top-0.5 rounded-full bg-black/50 p-0.5 text-white active:scale-90"
+                @click="removeImage(i)"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                     stroke-linecap="round" class="h-3 w-3"><path d="M6 6l12 12M18 6L6 18" /></svg>
+              </button>
+              <div class="absolute inset-x-0 bottom-0 flex justify-between bg-black/40 text-white">
+                <button
+                  type="button" aria-label="Sposta indietro" :disabled="i === 0"
+                  class="px-1.5 text-sm font-bold leading-5 disabled:opacity-30"
+                  @click="moveImage(i, -1)"
+                >‹</button>
+                <button
+                  type="button" aria-label="Sposta avanti" :disabled="i === imageItems.length - 1"
+                  class="px-1.5 text-sm font-bold leading-5 disabled:opacity-30"
+                  @click="moveImage(i, 1)"
+                >›</button>
+              </div>
+            </div>
+            <label
+              class="flex h-20 w-20 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-gray-300 text-gray-400"
+            >
+              <span class="text-2xl leading-none">+</span>
+              <span class="text-[10px]">Aggiungi</span>
+              <input type="file" accept="image/*" multiple class="hidden" @change="addImageFiles" />
+            </label>
+          </div>
         </div>
 
         <div class="flex gap-2">
@@ -272,7 +487,7 @@ onMounted(load);
           </button>
         </div>
       </form>
-    </section>
+    </Modal>
 
     <!-- Tabella catalogo -->
     <section>
@@ -302,46 +517,66 @@ onMounted(load);
               <th class="w-24 px-3 py-2 text-right">Azioni</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-gray-50">
-            <tr v-for="ex in paged" :key="ex.id" class="align-middle">
-              <td class="px-3 py-2">
-                <img
-                  v-if="ex.image_path" :src="exerciseImageUrl(ex.image_path)" :alt="ex.name"
-                  class="h-12 w-12 rounded-lg object-cover"
-                />
-                <div v-else class="flex h-12 w-12 items-center justify-center rounded-lg bg-gray-100 text-xl">🏋️</div>
-              </td>
-              <td class="px-3 py-2 font-medium text-gray-900">{{ ex.name }}</td>
-              <td class="px-3 py-2 text-gray-500">{{ ex.muscle_group || '—' }}</td>
-              <td class="whitespace-nowrap px-3 py-2">
-                <div class="flex justify-end gap-1">
-                <button
-                  class="rounded-lg p-2 text-brand active:scale-90"
-                  title="Modifica" aria-label="Modifica" @click="openEdit(ex)"
-                >
-                  <!-- matita -->
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
-                       stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5">
-                    <path d="M12 20h9" />
-                    <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
-                  </svg>
-                </button>
-                <button
-                  class="rounded-lg p-2 text-rose-600 active:scale-90"
-                  title="Elimina" aria-label="Elimina" @click="remove(ex)"
-                >
-                  <!-- cestino -->
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
-                       stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5">
-                    <path d="M3 6h18" />
-                    <path d="M8 6V4h8v2" />
-                    <path d="M6 6l1 14h10l1-14" />
-                    <path d="M10 11v6M14 11v6" />
-                  </svg>
-                </button>
-                </div>
-              </td>
-            </tr>
+          <tbody>
+            <template v-for="ex in paged" :key="ex.id">
+              <tr class="align-middle" :class="!(ex.equipment || ex.level || ex.mechanic) && 'border-b border-gray-50'">
+                <td class="px-3 pt-2" :class="(ex.equipment || ex.level || ex.mechanic) ? 'pb-1' : 'pb-2'">
+                  <img
+                    v-if="ex.image_path" :src="exerciseImageUrl(ex.image_path)" :alt="ex.name"
+                    class="h-12 w-12 rounded-lg object-cover"
+                  />
+                  <div v-else class="flex h-12 w-12 items-center justify-center rounded-lg bg-gray-100 text-xl">🏋️</div>
+                </td>
+                <td class="px-3 pt-2 font-medium text-gray-900" :class="(ex.equipment || ex.level || ex.mechanic) ? 'pb-1' : 'pb-2'">{{ ex.name }}</td>
+                <td class="px-3 pt-2 text-gray-500" :class="(ex.equipment || ex.level || ex.mechanic) ? 'pb-1' : 'pb-2'">{{ ex.muscle_group || '—' }}</td>
+                <td class="whitespace-nowrap px-3 pt-2" :class="(ex.equipment || ex.level || ex.mechanic) ? 'pb-1' : 'pb-2'">
+                  <div class="flex justify-end gap-1">
+                    <button
+                      class="rounded-lg p-2 text-brand active:scale-90"
+                      title="Modifica" aria-label="Modifica" @click="openEdit(ex)"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                           stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5">
+                        <path d="M12 20h9" />
+                        <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                      </svg>
+                    </button>
+                    <button
+                      class="rounded-lg p-2 text-rose-600 active:scale-90"
+                      title="Elimina" aria-label="Elimina" @click="remove(ex)"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                           stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5">
+                        <path d="M3 6h18" />
+                        <path d="M8 6V4h8v2" />
+                        <path d="M6 6l1 14h10l1-14" />
+                        <path d="M10 11v6M14 11v6" />
+                      </svg>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+              <!-- Seconda riga: chip su tutta la larghezza -->
+              <tr v-if="ex.equipment || ex.level || ex.mechanic" class="border-b border-gray-50">
+                <td></td>
+                <td colspan="3" class="px-3 pb-2 pt-0">
+                  <div class="flex flex-wrap gap-1">
+                    <span v-if="ex.equipment" class="inline-flex items-center gap-0.5 rounded bg-gray-100 px-1 py-px text-[9px] font-medium text-gray-500">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-2.5 w-2.5"><path d="M6.5 6.5l11 11M4 7l3-3 3 3-3 3zM14 17l3-3 3 3-3 3zM3 12h2M19 12h2" /></svg>
+                      {{ ex.equipment }}
+                    </span>
+                    <span v-if="ex.level" class="inline-flex items-center gap-0.5 rounded bg-gray-100 px-1 py-px text-[9px] font-medium capitalize text-gray-500">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="h-2.5 w-2.5"><path d="M5 19v-4M12 19v-9M19 19v-14" /></svg>
+                      {{ ex.level }}
+                    </span>
+                    <span v-if="ex.mechanic" class="inline-flex items-center gap-0.5 rounded bg-gray-100 px-1 py-px text-[9px] font-medium capitalize text-gray-500">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-2.5 w-2.5"><path d="M9 15l6-6M11 6l1-1a3 3 0 1 1 4 4l-1 1M13 18l-1 1a3 3 0 1 1-4-4l1-1" /></svg>
+                      {{ ex.mechanic }}
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            </template>
           </tbody>
         </table>
       </div>

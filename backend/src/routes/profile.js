@@ -41,6 +41,12 @@ export default async function profileRoutes(fastify) {
             last_name: { type: ['string', 'null'] },
             phone: { type: ['string', 'null'] },
             avatar_path: { type: ['string', 'null'] },
+            // Dati anagrafici/fisici (opzionali)
+            gender: { type: ['string', 'null'], enum: ['uomo', 'donna', 'altro', null] },
+            birth_date: { type: ['string', 'null'] }, // 'YYYY-MM-DD'
+            height_cm: { type: ['number', 'null'] },
+            weight_kg: { type: ['number', 'null'] },
+            notes: { type: ['string', 'null'] },
           },
         },
       },

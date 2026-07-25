@@ -105,326 +105,381 @@ if (!exercisesOnly) {
 }
 
 // =====================================================
-// Catalogo esercizi/macchine (50 voci comuni).
-//   load_type: 'weight' -> si registra il peso in kg
-//              'level'   -> si registra il livello di difficoltà (macchine cardio)
-//   has_incline: true    -> si registra anche la pendenza % (es. tapis roulant)
-// Fonti (esercizi/macchine comuni): guide gym equipment & exercise di
-//   fitnesspremierclubs.com, gymshark.com, truefitness.com.
+// Catalogo esercizi — importato PER INTERO da free-exercise-db (public domain,
+// ~873 voci). I NOMI restano in inglese (fonte); i metadati (gruppo muscolare,
+// attrezzatura, categoria, livello, meccanica, sforzo, muscoli secondari) sono
+// tradotti in italiano. Ogni esercizio porta le istruzioni (passi) e TUTTE le
+// immagini disponibili (per il carousel).
+//   load_type: 'weight' (peso kg) | 'level' (macchine cardio)
+// Fonte: https://github.com/yuhonas/free-exercise-db (Unlicense)
 // =====================================================
-const catalog = [
-  // ---- Gambe / polpacci ----
-  { name: 'Squat con bilanciere', muscle_group: 'Gambe', load_type: 'weight',
-    description: 'Bilanciere sulle spalle, piedi larghezza spalle. Scendi spingendo i fianchi indietro fino a coscia parallela, poi risali spingendo sui talloni.' },
-  { name: 'Leg press', muscle_group: 'Gambe', load_type: 'weight',
-    description: 'Seduto alla pressa, piedi a metà pedana. Spingi la piattaforma estendendo le gambe senza bloccare le ginocchia, poi rientra controllato.' },
-  { name: 'Leg extension', muscle_group: 'Gambe', load_type: 'weight',
-    description: 'Seduto alla macchina, caviglie sotto il rullo. Estendi le ginocchia fino a gambe tese, contrai il quadricipite e scendi lentamente.' },
-  { name: 'Leg curl sdraiato', muscle_group: 'Gambe', load_type: 'weight',
-    description: 'Sdraiato prono, talloni sotto il rullo. Fletti le ginocchia portando i talloni verso i glutei, poi torna controllato.' },
-  { name: 'Affondi con manubri', muscle_group: 'Gambe', load_type: 'weight',
-    description: 'Manubri lungo i fianchi. Fai un passo avanti e scendi fino a 90°, poi spingi sul tallone anteriore per risalire.' },
-  { name: 'Hack squat', muscle_group: 'Gambe', load_type: 'weight',
-    description: 'Spalle e schiena contro lo schienale della macchina. Scendi in accosciata controllata e risali spingendo sui talloni.' },
-  { name: 'Goblet squat', muscle_group: 'Gambe', load_type: 'weight',
-    description: 'Un manubrio tenuto al petto. Squat profondo mantenendo il busto eretto e i gomiti tra le ginocchia.' },
-  { name: 'Stacco rumeno', muscle_group: 'Gambe', load_type: 'weight',
-    description: 'Bilanciere/manubri davanti alle cosce. Spingi i fianchi indietro scendendo a schiena dritta, senti l\'allungamento dei femorali, poi risali.' },
-  { name: 'Adductor machine', muscle_group: 'Gambe', load_type: 'weight',
-    description: 'Seduto, cuscinetti all\'interno delle cosce. Chiudi le gambe contro la resistenza, poi apri controllato.' },
-  { name: 'Abductor machine', muscle_group: 'Gambe', load_type: 'weight',
-    description: 'Seduto, cuscinetti all\'esterno delle cosce. Apri le gambe spingendo verso l\'esterno, poi rientra lentamente.' },
-  { name: 'Bulgarian split squat', muscle_group: 'Gambe', load_type: 'weight',
-    description: 'Piede posteriore su una panca. Scendi con la gamba anteriore fino a 90°, poi risali spingendo sul tallone.' },
-  { name: 'Calf raise', muscle_group: 'Polpacci', load_type: 'weight',
-    description: 'In piedi o alla pressa, avampiede sul supporto. Sali sulle punte contraendo i polpacci, poi scendi sotto il livello per allungare.' },
 
-  // ---- Petto ----
-  { name: 'Panca piana con bilanciere', muscle_group: 'Petto', load_type: 'weight',
-    description: 'Scapole retratte, piedi a terra. Scendi il bilanciere al petto controllato, poi spingi verso l\'alto senza staccare i glutei.' },
-  { name: 'Panca inclinata con manubri', muscle_group: 'Petto', load_type: 'weight',
-    description: 'Schienale a 30-45°. Spingi i manubri verso l\'alto sopra il petto alto, poi scendi controllato ampliando il movimento.' },
-  { name: 'Chest press', muscle_group: 'Petto', load_type: 'weight',
-    description: 'Seduto alla macchina, impugnature all\'altezza del petto. Spingi in avanti fino a quasi estendere le braccia, poi rientra.' },
-  { name: 'Chiusure alla pectoral machine', muscle_group: 'Petto', load_type: 'weight',
-    description: 'Seduto alla pectoral machine, avambracci sui cuscinetti. Chiudi le braccia davanti al petto contraendo i pettorali, poi apri controllato.' },
-  { name: 'Croci ai cavi', muscle_group: 'Petto', load_type: 'weight',
-    description: 'In piedi tra due cavi alti. Con gomiti leggermente flessi porta le maniglie davanti al petto, poi apri lentamente.' },
-  { name: 'Piegamenti sulle braccia', muscle_group: 'Petto', load_type: 'weight',
-    description: 'Mani poco più larghe delle spalle, corpo in linea. Scendi fino a sfiorare il pavimento col petto, poi spingi su.' },
-  { name: 'Dip alle parallele', muscle_group: 'Petto', load_type: 'weight',
-    description: 'Sospeso alle parallele, busto leggermente inclinato avanti. Scendi flettendo i gomiti, poi risali estendendo le braccia.' },
-
-  // ---- Schiena / dorsali ----
-  { name: 'Stacco da terra', muscle_group: 'Schiena', load_type: 'weight',
-    description: 'Bilanciere vicino alle tibie, schiena dritta. Estendi anche e ginocchia insieme mantenendo il core contratto.' },
-  { name: 'Lat machine', muscle_group: 'Dorsali', load_type: 'weight',
-    description: 'Presa prona più larga delle spalle. Tira la barra verso il petto alto abbassando le scapole, poi risali controllato.' },
-  { name: 'Pulley basso', muscle_group: 'Schiena', load_type: 'weight',
-    description: 'Seduto, schiena dritta. Tira la maniglia all\'addome portando i gomiti indietro, stringi le scapole, poi allunga.' },
-  { name: 'Rematore con bilanciere', muscle_group: 'Schiena', load_type: 'weight',
-    description: 'Busto inclinato a ~45°, schiena neutra. Tira il bilanciere verso l\'ombelico, poi scendi controllato.' },
-  { name: 'Rematore con manubrio', muscle_group: 'Schiena', load_type: 'weight',
-    description: 'Un ginocchio e una mano sulla panca. Tira il manubrio al fianco portando il gomito indietro, poi scendi.' },
-  { name: 'Trazioni alla sbarra', muscle_group: 'Dorsali', load_type: 'weight',
-    description: 'Presa prona poco più larga delle spalle. Tira i gomiti verso il basso portando il mento sopra la sbarra, controlla la discesa.' },
-  { name: 'Pullover con manubrio', muscle_group: 'Schiena', load_type: 'weight',
-    description: 'Sdraiato, manubrio sopra il petto. Porta le braccia dietro la testa allungando i dorsali, poi riporta sopra il petto.' },
-  { name: 'Seated row machine', muscle_group: 'Schiena', load_type: 'weight',
-    description: 'Seduto col petto contro il pad. Tira le impugnature verso di te stringendo le scapole, poi rilascia controllato.' },
-
-  // ---- Spalle ----
-  { name: 'Military press', muscle_group: 'Spalle', load_type: 'weight',
-    description: 'In piedi, bilanciere all\'altezza delle clavicole. Spingi sopra la testa fino a braccia tese, poi scendi controllato.' },
-  { name: 'Shoulder press machine', muscle_group: 'Spalle', load_type: 'weight',
-    description: 'Seduto, impugnature all\'altezza delle spalle. Spingi verso l\'alto senza bloccare i gomiti, poi rientra.' },
-  { name: 'Alzate laterali', muscle_group: 'Spalle', load_type: 'weight',
-    description: 'Manubri ai fianchi, gomiti leggermente flessi. Solleva le braccia fino all\'altezza delle spalle, poi scendi lentamente.' },
-  { name: 'Alzate frontali', muscle_group: 'Spalle', load_type: 'weight',
-    description: 'Manubri davanti alle cosce. Solleva le braccia davanti fino all\'altezza delle spalle, poi scendi controllato.' },
-  { name: 'Arnold press', muscle_group: 'Spalle', load_type: 'weight',
-    description: 'Manubri davanti al viso, palmi verso di te. Ruota ed estendi sopra la testa, poi torna invertendo il movimento.' },
-  { name: 'Face pull ai cavi', muscle_group: 'Spalle', load_type: 'weight',
-    description: 'Cavo all\'altezza del viso, presa a corda. Tira verso la fronte aprendo i gomiti, contrai i deltoidi posteriori.' },
-
-  // ---- Braccia ----
-  { name: 'Curl con bilanciere', muscle_group: 'Bicipiti', load_type: 'weight',
-    description: 'In piedi, presa supina. Fletti i gomiti portando il bilanciere alle spalle senza dondolare, poi scendi controllato.' },
-  { name: 'Curl con manubri', muscle_group: 'Bicipiti', load_type: 'weight',
-    description: 'Manubri ai fianchi, palmi in avanti. Fletti alternando o insieme, contrai i bicipiti in alto, poi scendi.' },
-  { name: 'Curl a martello', muscle_group: 'Bicipiti', load_type: 'weight',
-    description: 'Manubri con presa neutra (palmi verso il corpo). Fletti i gomiti mantenendo i polsi fermi, poi scendi.' },
-  { name: 'Panca Scott', muscle_group: 'Bicipiti', load_type: 'weight',
-    description: 'Braccia appoggiate sul leggio. Fletti i gomiti sollevando il peso, poi scendi senza estendere del tutto.' },
-  { name: 'Curl ai cavi', muscle_group: 'Bicipiti', load_type: 'weight',
-    description: 'In piedi al cavo basso. Fletti i gomiti tenendoli fermi ai fianchi, contrai in alto, poi scendi controllato.' },
-  { name: 'French press', muscle_group: 'Tricipiti', load_type: 'weight',
-    description: 'Sdraiato o seduto, bilanciere sopra la fronte. Fletti i gomiti abbassando il peso, poi estendi le braccia.' },
-  { name: 'Tricipiti ai cavi', muscle_group: 'Tricipiti', load_type: 'weight',
-    description: 'In piedi al cavo alto, presa a barra/corda. Estendi i gomiti spingendo verso il basso, poi risali controllato.' },
-  { name: 'Dip per tricipiti', muscle_group: 'Tricipiti', load_type: 'weight',
-    description: 'Alle parallele con busto verticale. Scendi flettendo i gomiti vicini al corpo, poi estendi per risalire.' },
-
-  // ---- Addome / core ----
-  { name: 'Crunch', muscle_group: 'Addominali', load_type: 'weight',
-    description: 'Sdraiato, ginocchia piegate. Solleva le scapole avvicinando le costole al bacino, poi scendi controllato.' },
-  { name: 'Crunch alla macchina', muscle_group: 'Addominali', load_type: 'weight',
-    description: 'Seduto, presa sulle impugnature. Fletti il busto in avanti contraendo gli addominali, poi torna controllato.' },
-  { name: 'Russian twist', muscle_group: 'Addominali', load_type: 'weight',
-    description: 'Seduto, busto inclinato indietro e piedi sollevati. Ruota il tronco portando le mani/peso da un lato all\'altro.' },
-  { name: 'Plank', muscle_group: 'Core', load_type: 'weight',
-    description: 'Appoggio su avambracci e punte, corpo in linea. Mantieni la posizione contraendo core e glutei (registra i secondi come reps).' },
-
-  // ---- Cardio (livello di difficoltà) ----
-  { name: 'Tapis roulant', muscle_group: 'Cardio', load_type: 'level', has_incline: true,
-    description: 'Camminata/corsa a ritmo costante. Imposta il livello (velocità) e la pendenza indicati dalla scheda.' },
-  { name: 'Cyclette', muscle_group: 'Cardio', load_type: 'level',
-    description: 'Pedalata a resistenza costante. Regola il livello di difficoltà e mantieni una cadenza regolare.' },
-  { name: 'Ellittica', muscle_group: 'Cardio', load_type: 'level',
-    description: 'Movimento fluido di gambe e braccia. Imposta il livello di resistenza e mantieni un ritmo costante.' },
-  { name: 'Vogatore', muscle_group: 'Cardio', load_type: 'level',
-    description: 'Spingi con le gambe, poi tira con schiena e braccia. Regola il livello e mantieni colpi controllati.' },
-  { name: 'Stair climber', muscle_group: 'Cardio', load_type: 'level',
-    description: 'Salita continua di gradini. Imposta il livello e mantieni una postura eretta senza appoggiarti troppo.' },
-];
-
-// Colore dell'immagine segnaposto per gruppo muscolare
+// Colore del segnaposto per muscolo primario (fallback grigio)
 const groupColor = {
-  Gambe: '#4f46e5', Polpacci: '#6366f1', Petto: '#059669', Schiena: '#dc2626',
-  Dorsali: '#ea580c', Spalle: '#d97706', Bicipiti: '#7c3aed', Tricipiti: '#9333ea',
-  Addominali: '#0d9488', Core: '#0f766e', Cardio: '#0891b2',
+  quadricipiti: '#4f46e5', femorali: '#4338ca', glutei: '#6366f1', polpacci: '#818cf8',
+  petto: '#059669', dorsali: '#dc2626', 'schiena centrale': '#ea580c', lombari: '#f97316',
+  trapezio: '#b45309', spalle: '#d97706', bicipiti: '#7c3aed', tricipiti: '#9333ea',
+  avambracci: '#65a30d', addominali: '#0d9488', collo: '#0f766e',
+  abduttori: '#0891b2', adduttori: '#0e7490',
 };
 
-// Immagine SVG "esplicativa" con il nome dell'esercizio (segnaposto per la demo).
+// SVG "esplicativo" col nome dell'esercizio (segnaposto se manca la foto reale).
 function placeholderSvg(label, color) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300">
     <rect width="400" height="300" fill="${color}"/>
-    <text x="200" y="155" font-family="sans-serif" font-size="26" fill="#fff"
+    <text x="200" y="155" font-family="sans-serif" font-size="22" fill="#fff"
       text-anchor="middle">${label}</text>
   </svg>`;
 }
 
-// Slug ASCII per il nome file nel bucket (rimuove accenti e caratteri speciali)
+// Slug ASCII per il nome file nel bucket
 function slug(s) {
   return s.normalize('NFD').replace(/[̀-ͯ]/g, '')
     .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 }
 
-// Immagini REALI (Free Exercise DB, public domain): nome esercizio -> path nel repo.
-// https://github.com/yuhonas/free-exercise-db (Unlicense). Se il download fallisce
-// si ricade sul segnaposto SVG colorato.
 const FEDB_BASE = 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises';
-const fedbByName = {
-  'Squat con bilanciere': 'Barbell_Squat/0.jpg',
-  'Leg press': 'Leg_Press/0.jpg',
-  'Leg extension': 'Leg_Extensions/0.jpg',
-  'Leg curl sdraiato': 'Lying_Leg_Curls/0.jpg',
-  'Affondi con manubri': 'Dumbbell_Lunges/0.jpg',
-  'Hack squat': 'Hack_Squat/0.jpg',
-  'Goblet squat': 'Goblet_Squat/0.jpg',
-  'Stacco rumeno': 'Romanian_Deadlift/0.jpg',
-  'Adductor machine': 'Adductor/0.jpg',
-  'Abductor machine': 'Thigh_Abductor/0.jpg',
-  'Bulgarian split squat': 'Smith_Single-Leg_Split_Squat/0.jpg',
-  'Calf raise': 'Standing_Calf_Raises/0.jpg',
-  'Panca piana con bilanciere': 'Barbell_Bench_Press_-_Medium_Grip/0.jpg',
-  'Panca inclinata con manubri': 'Incline_Dumbbell_Press/0.jpg',
-  'Chest press': 'Machine_Bench_Press/0.jpg',
-  'Chiusure alla pectoral machine': 'Butterfly/0.jpg',
-  'Croci ai cavi': 'Cable_Crossover/0.jpg',
-  'Piegamenti sulle braccia': 'Pushups/0.jpg',
-  'Dip alle parallele': 'Dips_-_Chest_Version/0.jpg',
-  'Stacco da terra': 'Barbell_Deadlift/0.jpg',
-  'Lat machine': 'Full_Range-Of-Motion_Lat_Pulldown/0.jpg',
-  'Pulley basso': 'Seated_Cable_Rows/0.jpg',
-  'Rematore con bilanciere': 'Bent_Over_Barbell_Row/0.jpg',
-  'Rematore con manubrio': 'One-Arm_Dumbbell_Row/0.jpg',
-  'Trazioni alla sbarra': 'Pullups/0.jpg',
-  'Pullover con manubrio': 'Bent-Arm_Dumbbell_Pullover/0.jpg',
-  'Seated row machine': 'Leverage_Iso_Row/0.jpg',
-  'Military press': 'Standing_Military_Press/0.jpg',
-  'Shoulder press machine': 'Machine_Shoulder_Military_Press/0.jpg',
-  'Alzate laterali': 'Side_Lateral_Raise/0.jpg',
-  'Alzate frontali': 'Front_Dumbbell_Raise/0.jpg',
-  'Arnold press': 'Arnold_Dumbbell_Press/0.jpg',
-  'Face pull ai cavi': 'Face_Pull/0.jpg',
-  'Curl con bilanciere': 'Barbell_Curl/0.jpg',
-  'Curl con manubri': 'Dumbbell_Bicep_Curl/0.jpg',
-  'Curl a martello': 'Hammer_Curls/0.jpg',
-  'Panca Scott': 'Preacher_Curl/0.jpg',
-  'Curl ai cavi': 'Standing_Biceps_Cable_Curl/0.jpg',
-  'French press': 'Lying_Triceps_Press/0.jpg',
-  'Tricipiti ai cavi': 'Triceps_Pushdown/0.jpg',
-  'Dip per tricipiti': 'Dips_-_Triceps_Version/0.jpg',
-  'Crunch': 'Crunches/0.jpg',
-  'Crunch alla macchina': 'Cable_Crunch/0.jpg',
-  'Russian twist': 'Russian_Twist/0.jpg',
-  'Plank': 'Plank/0.jpg',
-  'Tapis roulant': 'Jogging_Treadmill/0.jpg',
-  'Cyclette': 'Bicycling/0.jpg',
-  'Ellittica': 'Elliptical_Trainer/0.jpg',
-  'Vogatore': 'Rowing_Stationary/0.jpg',
-  'Stair climber': 'Stairmaster/0.jpg',
+const FEDB_INDEX_URL = 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/dist/exercises.json';
+
+// --- Traduzioni EN -> IT (coerenti con la UI e i CHECK delle migration) ---
+const EQUIP_IT = {
+  barbell: 'Bilanciere', dumbbell: 'Manubri', cable: 'Cavi', machine: 'Macchina',
+  'body only': 'Corpo libero', kettlebells: 'Kettlebell', bands: 'Elastici',
+  'medicine ball': 'Palla medica', 'exercise ball': 'Fitball', 'e-z curl bar': 'Bilanciere EZ',
+  'foam roll': 'Foam roller', other: 'Altro',
+};
+const LEVEL_IT = { beginner: 'principiante', intermediate: 'intermedio', expert: 'avanzato' };
+const MECH_IT = { compound: 'composto', isolation: 'isolamento' };
+const FORCE_IT = { push: 'spinta', pull: 'trazione', static: 'statico' };
+const CAT_IT = {
+  strength: 'forza', cardio: 'cardio', stretching: 'stretching', plyometrics: 'pliometria',
+  powerlifting: 'powerlifting', 'olympic weightlifting': 'weightlifting', strongman: 'strongman',
+};
+const MUSCLE_IT = {
+  abdominals: 'addominali', abductors: 'abduttori', adductors: 'adduttori', biceps: 'bicipiti',
+  calves: 'polpacci', chest: 'petto', forearms: 'avambracci', glutes: 'glutei',
+  hamstrings: 'femorali', lats: 'dorsali', 'lower back': 'lombari', 'middle back': 'schiena centrale',
+  neck: 'collo', quadriceps: 'quadricipiti', shoulders: 'spalle', traps: 'trapezio', triceps: 'tricipiti',
 };
 
-// Video diretti curati per gli esercizi più comuni (tutorial YouTube).
-// Gli altri ricevono un link di ricerca YouTube (sempre valido).
-const videoByName = {
-  'Squat con bilanciere': 'https://www.youtube.com/watch?v=aclHkVaku9U',
-  'Panca piana con bilanciere': 'https://www.youtube.com/watch?v=3CgfAV84cfM',
-  'Stacco da terra': 'https://www.youtube.com/watch?v=b4NI-OkEnW0',
-  'Military press': 'https://www.youtube.com/watch?v=mywEUpC1oyM',
-  'Lat machine': 'https://www.youtube.com/watch?v=P8QKoy5sjv8',
-  'Rematore con bilanciere': 'https://www.youtube.com/watch?v=cDZh_hx3YgU',
-  'Trazioni alla sbarra': 'https://www.youtube.com/watch?v=m2cauCtWj8E',
-  'Leg press': 'https://www.youtube.com/watch?v=LMTyPl_oo38',
-  'Curl con bilanciere': 'https://www.youtube.com/watch?v=mhrv92jvtc4',
-  'Tricipiti ai cavi': 'https://www.youtube.com/watch?v=8NMnKwaOtB8',
-  'Stacco rumeno': 'https://www.youtube.com/watch?v=Rki1bVYxHok',
-  'Affondi con manubri': 'https://www.youtube.com/watch?v=Jezpb-6fuQ0',
-  'Alzate laterali': 'https://www.youtube.com/watch?v=6sT8LVeGVoc',
+// Video diretti curati (chiave = id free-exercise-db, verificati). Gli altri:
+// link di ricerca YouTube (sempre valido).
+const videoById = {
+  'Barbell_Squat': 'https://www.youtube.com/watch?v=aclHkVaku9U',
+  'Barbell_Bench_Press_-_Medium_Grip': 'https://www.youtube.com/watch?v=3CgfAV84cfM',
+  'Barbell_Deadlift': 'https://www.youtube.com/watch?v=b4NI-OkEnW0',
+  'Standing_Military_Press': 'https://www.youtube.com/watch?v=mywEUpC1oyM',
+  'Full_Range-Of-Motion_Lat_Pulldown': 'https://www.youtube.com/watch?v=P8QKoy5sjv8',
+  'Bent_Over_Barbell_Row': 'https://www.youtube.com/watch?v=cDZh_hx3YgU',
+  'Pullups': 'https://www.youtube.com/watch?v=m2cauCtWj8E',
+  'Leg_Press': 'https://www.youtube.com/watch?v=LMTyPl_oo38',
+  'Barbell_Curl': 'https://www.youtube.com/watch?v=mhrv92jvtc4',
+  'Triceps_Pushdown': 'https://www.youtube.com/watch?v=8NMnKwaOtB8',
+  'Romanian_Deadlift': 'https://www.youtube.com/watch?v=Rki1bVYxHok',
+  'Dumbbell_Lunges': 'https://www.youtube.com/watch?v=Jezpb-6fuQ0',
+  'Side_Lateral_Raise': 'https://www.youtube.com/watch?v=6sT8LVeGVoc',
   'Plank': 'https://www.youtube.com/watch?v=Is-7PPaBcsM',
-  'Dip alle parallele': 'https://www.youtube.com/watch?v=SLVwguvd6io',
-  'Panca inclinata con manubri': 'https://www.youtube.com/watch?v=AH4zcrU9P5A',
+  'Dips_-_Chest_Version': 'https://www.youtube.com/watch?v=SLVwguvd6io',
+  'Incline_Dumbbell_Press': 'https://www.youtube.com/watch?v=AH4zcrU9P5A',
+  'Front_Barbell_Squat': 'https://www.youtube.com/watch?v=npVgCT7NznU',
+  'Stiff-Legged_Barbell_Deadlift': 'https://www.youtube.com/watch?v=RpwTdghpl0Y',
+  'Barbell_Glute_Bridge': 'https://www.youtube.com/watch?v=wPM8icPu6H8',
+  'Seated_Leg_Curl': 'https://www.youtube.com/watch?v=t9sTSr-JYSs',
+  'Barbell_Incline_Bench_Press_-_Medium_Grip': 'https://www.youtube.com/watch?v=SrqOu55lrYU',
+  'Dumbbell_Flyes': 'https://www.youtube.com/watch?v=LzFvciCdoW0',
+  'Close-Grip_Barbell_Bench_Press': 'https://www.youtube.com/watch?v=UYJsFzqdgK4',
+  'Lying_T-Bar_Row': 'https://www.youtube.com/watch?v=SbZycT7Eq58',
+  'Chin-Up': 'https://www.youtube.com/watch?v=e1YSApl-QcM',
+  'Good_Morning': 'https://www.youtube.com/watch?v=0Syp9iyINZ4',
+  'Upright_Barbell_Row': 'https://www.youtube.com/watch?v=v7nsz05s9oM',
+  'Dumbbell_Shrug': 'https://www.youtube.com/watch?v=qvvJUKq7_sU',
+  'Concentration_Curls': 'https://www.youtube.com/watch?v=Jvj2wV0vOYU',
+  'Triceps_Pushdown_-_Rope_Attachment': 'https://www.youtube.com/watch?v=vPeQu_L-1n0',
+  'Cable_Seated_Lateral_Raise': 'https://www.youtube.com/watch?v=qitQHqNZbeM',
+  'Hanging_Leg_Raise': 'https://www.youtube.com/watch?v=rbOJSK07AGA',
+  'Sit-Up': 'https://www.youtube.com/watch?v=iL06z9PWYs8',
+  'Mountain_Climbers': 'https://www.youtube.com/watch?v=Q_olQdxEPF4',
+  'Rope_Jumping': 'https://www.youtube.com/watch?v=_UTR1VWg8WY',
+  'Farmers_Walk': 'https://www.youtube.com/watch?v=NH7Xv-7NQNQ',
+  'One-Arm_Kettlebell_Swings': 'https://www.youtube.com/watch?v=sSESeQAir2M',
+  'Barbell_Walking_Lunge': 'https://www.youtube.com/watch?v=I34ysEkPK7w',
 };
 
-// Link di ricerca YouTube (fallback per gli esercizi senza video diretto)
 const youtubeSearch = (name) =>
-  `https://www.youtube.com/results?search_query=${encodeURIComponent('come eseguire ' + name)}`;
+  `https://www.youtube.com/results?search_query=${encodeURIComponent('how to ' + name)}`;
 
-// Carica un'immagine nel bucket, restituisce il path usato.
-async function uploadImage(ex) {
-  const rel = fedbByName[ex.name];
-  if (rel) {
-    try {
-      const url = `${FEDB_BASE}/${rel.split('/').map(encodeURIComponent).join('/')}`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const buf = Buffer.from(await res.arrayBuffer());
-      const path = `seed/${slug(ex.name)}.jpg`;
-      await admin.storage.from('exercise-images').upload(path, buf, { contentType: 'image/jpeg', upsert: true });
-      return path;
-    } catch {
-      // fallback al segnaposto se il download fallisce
-    }
-  }
-  const path = `seed/${slug(ex.name)}.svg`;
-  await admin.storage.from('exercise-images').upload(
-    path,
-    Buffer.from(placeholderSvg(ex.name, groupColor[ex.muscle_group] || '#64748b')),
-    { contentType: 'image/svg+xml', upsert: true }
-  );
-  return path;
+// --- Indice completo della fonte (obbligatorio per l'import di massa) ---
+console.log("Scarico l'indice esercizi dalla fonte…");
+let index = [];
+try {
+  const res = await fetch(FEDB_INDEX_URL);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  index = await res.json();
+} catch (e) {
+  console.error("❌ Impossibile scaricare l'indice esercizi:", e.message);
+  process.exit(1);
 }
 
-console.log(`Popolo il catalogo (${catalog.length} esercizi, scarico le immagini reali)…`);
+// Scarica e carica UNA immagine della fonte; ritorna il path nel bucket o null.
+async function uploadOne(id, rel, i) {
+  try {
+    const url = `${FEDB_BASE}/${rel.split('/').map(encodeURIComponent).join('/')}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const buf = Buffer.from(await res.arrayBuffer());
+    const path = `seed/${slug(id)}-${i}.jpg`;
+    await admin.storage.from('exercise-images').upload(path, buf, { contentType: 'image/jpeg', upsert: true });
+    return path;
+  } catch {
+    return null; // singola immagine fallita: si prosegue con le altre
+  }
+}
+
+// Carica TUTTE le immagini dell'esercizio; se nessuna, segnaposto SVG.
+async function uploadImages(e) {
+  const paths = [];
+  const rels = e.images || [];
+  for (let i = 0; i < rels.length; i++) {
+    const p = await uploadOne(e.id, rels[i], i);
+    if (p) paths.push(p);
+  }
+  if (paths.length) return paths;
+  const path = `seed/${slug(e.id)}.svg`;
+  const color = groupColor[MUSCLE_IT[e.primaryMuscles?.[0]]] || '#64748b';
+  await admin.storage.from('exercise-images').upload(
+    path, Buffer.from(placeholderSvg(e.name, color)), { contentType: 'image/svg+xml', upsert: true }
+  );
+  return [path];
+}
+
+// Costruisce la riga esercizio (tradotta) da un record della fonte.
+function toRow(e, image_paths) {
+  const secondary = (e.secondaryMuscles || []).map((x) => MUSCLE_IT[x] || x).filter(Boolean);
+  return {
+    name: e.name, // inglese (fonte)
+    muscle_group: MUSCLE_IT[e.primaryMuscles?.[0]] || null,
+    description: (e.instructions || []).join(' ') || null,
+    instructions: e.instructions || [],
+    load_type: e.category === 'cardio' ? 'level' : 'weight',
+    has_incline: false,
+    video_url: videoById[e.id] || youtubeSearch(e.name),
+    image_path: image_paths[0], // copertina
+    image_paths, // tutte, per il carousel
+    equipment: EQUIP_IT[e.equipment] || null,
+    category: CAT_IT[e.category] || null,
+    force: FORCE_IT[e.force] || null,
+    level: LEVEL_IT[e.level] || null,
+    mechanic: MECH_IT[e.mechanic] || null,
+    secondary_muscles: secondary,
+  };
+}
+
+// --- Popolamento con pool a concorrenza limitata (873×2 immagini) ---
+console.log(`Popolo il catalogo (${index.length} esercizi dalla fonte, scarico le immagini)…`);
 const exerciseIdByName = {};
-let realImgs = 0;
-for (const ex of catalog) {
-  const image_path = await uploadImage(ex);
-  if (image_path.endsWith('.jpg')) realImgs++;
+let done = 0, realImgs = 0, totImgs = 0;
+
+async function processOne(e) {
+  const image_paths = await uploadImages(e);
+  if (image_paths.some((p) => p.endsWith('.jpg'))) realImgs++;
+  totImgs += image_paths.filter((p) => p.endsWith('.jpg')).length;
   const { data, error } = await admin
     .from('exercises')
-    .upsert(
-      {
-        name: ex.name,
-        muscle_group: ex.muscle_group,
-        description: ex.description,
-        load_type: ex.load_type,
-        has_incline: ex.has_incline ?? false,
-        video_url: videoByName[ex.name] ?? youtubeSearch(ex.name),
-        image_path,
-      },
-      { onConflict: 'name' }
-    )
-    .select()
+    .upsert(toRow(e, image_paths), { onConflict: 'name' })
+    .select('id, name')
     .single();
-  if (error) throw new Error(`Upsert esercizio "${ex.name}" fallito: ${error.message}`);
-  exerciseIdByName[ex.name] = data.id;
+  if (error) throw new Error(`Upsert "${e.name}" fallito: ${error.message}`);
+  exerciseIdByName[e.name] = data.id;
+  if (++done % 50 === 0 || done === index.length) console.log(`  ${done}/${index.length}…`);
 }
-console.log(`  immagini reali caricate: ${realImgs}/${catalog.length} (le altre col segnaposto)`);
 
-// Scheda di esempio per il member: solo nel reset completo
-if (!exercisesOnly) {
-  const day = (name, items) => ({
-    name,
-    exercises: items.map(([exName, sets, reps, rest_seconds]) => ({
+// Esegue fn su tutti gli item con al più `n` in volo contemporaneamente.
+async function runPool(items, n, fn) {
+  const queue = [...items];
+  await Promise.all(
+    Array.from({ length: n }, async () => {
+      while (queue.length) await fn(queue.shift());
+    })
+  );
+}
+
+await runPool(index, 8, processOne);
+console.log(`  esercizi caricati: ${done}/${index.length} · immagini reali: ${totImgs} · con immagine: ${realImgs}`);
+
+// =====================================================
+// Schede preconfezionate (libreria) — programmi noti che referenziano il
+// catalogo per nome inglese. Trainer/admin le assegnano a un cliente.
+// =====================================================
+const tday = (name, items) => ({
+  name,
+  exercises: items
+    .map(([exName, sets, reps, rest]) => ({
       exercise_id: exerciseIdByName[exName],
-      sets, reps, rest_seconds,
-    })),
-  });
+      sets, reps, rest_seconds: rest,
+    }))
+    .filter((x) => x.exercise_id), // scarta esercizi non presenti nel catalogo
+});
 
+const templates = [
+  {
+    title: 'Full Body 3x', goal: 'ipertrofia', level: 'principiante',
+    description: 'Total body 3 volte a settimana (A/B/C). Ideale per iniziare.',
+    days_json: [
+      tday('Giorno A', [
+        ['Barbell Squat', 3, 10, 120], ['Barbell Bench Press - Medium Grip', 3, 10, 120],
+        ['Bent Over Barbell Row', 3, 10, 120], ['Standing Military Press', 3, 10, 90], ['Plank', 3, 45, 60],
+      ]),
+      tday('Giorno B', [
+        ['Barbell Deadlift', 3, 8, 150], ['Incline Dumbbell Press', 3, 10, 120],
+        ['Wide-Grip Lat Pulldown', 3, 10, 90], ['Dumbbell Lunges', 3, 12, 90], ['Crunches', 3, 15, 45],
+      ]),
+      tday('Giorno C', [
+        ['Leg Press', 3, 12, 90], ['Dumbbell Bench Press', 3, 10, 90],
+        ['Seated Cable Rows', 3, 10, 90], ['Side Lateral Raise', 3, 12, 60], ['Hanging Leg Raise', 3, 12, 60],
+      ]),
+    ],
+  },
+  {
+    title: 'Push Pull Legs', goal: 'ipertrofia', level: 'intermedio',
+    description: 'Split PPL: spinta / tirata / gambe. Ripetibile 6 giorni a settimana.',
+    days_json: [
+      tday('Push', [
+        ['Barbell Bench Press - Medium Grip', 4, 8, 120], ['Incline Dumbbell Press', 3, 10, 90],
+        ['Standing Military Press', 3, 10, 90], ['Side Lateral Raise', 3, 15, 60], ['Triceps Pushdown', 3, 12, 60],
+      ]),
+      tday('Pull', [
+        ['Barbell Deadlift', 3, 6, 150], ['Pullups', 4, 8, 120], ['Bent Over Barbell Row', 3, 10, 90],
+        ['Face Pull', 3, 15, 60], ['Barbell Curl', 3, 12, 60],
+      ]),
+      tday('Legs', [
+        ['Barbell Squat', 4, 8, 150], ['Romanian Deadlift', 3, 10, 120], ['Leg Press', 3, 12, 90],
+        ['Lying Leg Curls', 3, 12, 60], ['Standing Calf Raises', 4, 15, 45],
+      ]),
+    ],
+  },
+  {
+    title: 'Upper / Lower', goal: 'ipertrofia', level: 'intermedio',
+    description: 'Split superiore/inferiore su 4 giorni.',
+    days_json: [
+      tday('Upper', [
+        ['Barbell Bench Press - Medium Grip', 4, 8, 120], ['Bent Over Barbell Row', 4, 8, 120],
+        ['Standing Military Press', 3, 10, 90], ['Pullups', 3, 8, 90], ['Barbell Curl', 3, 12, 60],
+        ['Triceps Pushdown', 3, 12, 60],
+      ]),
+      tday('Lower', [
+        ['Barbell Squat', 4, 8, 150], ['Romanian Deadlift', 3, 10, 120], ['Leg Press', 3, 12, 90],
+        ['Lying Leg Curls', 3, 12, 60], ['Standing Calf Raises', 4, 15, 45],
+      ]),
+    ],
+  },
+  {
+    title: 'StrongLifts 5x5', goal: 'forza', level: 'principiante',
+    description: 'Forza base 5x5, allenamenti A/B a giorni alterni.',
+    days_json: [
+      tday('Workout A', [
+        ['Barbell Squat', 5, 5, 180], ['Barbell Bench Press - Medium Grip', 5, 5, 180],
+        ['Bent Over Barbell Row', 5, 5, 180],
+      ]),
+      tday('Workout B', [
+        ['Barbell Squat', 5, 5, 180], ['Standing Military Press', 5, 5, 180], ['Barbell Deadlift', 1, 5, 180],
+      ]),
+    ],
+  },
+  {
+    title: 'Bro Split 5 giorni', goal: 'ipertrofia', level: 'intermedio',
+    description: 'Un gruppo muscolare al giorno, 5 sedute.',
+    days_json: [
+      tday('Petto', [
+        ['Barbell Bench Press - Medium Grip', 4, 8, 120], ['Incline Dumbbell Press', 3, 10, 90],
+        ['Dumbbell Flyes', 3, 12, 60], ['Dips - Chest Version', 3, 10, 90],
+      ]),
+      tday('Schiena', [
+        ['Barbell Deadlift', 3, 6, 150], ['Pullups', 4, 8, 120], ['Bent Over Barbell Row', 4, 10, 90],
+        ['Seated Cable Rows', 3, 12, 60],
+      ]),
+      tday('Spalle', [
+        ['Standing Military Press', 4, 8, 120], ['Side Lateral Raise', 4, 15, 60],
+        ['Upright Barbell Row', 3, 12, 60], ['Dumbbell Shrug', 4, 15, 60],
+      ]),
+      tday('Gambe', [
+        ['Barbell Squat', 4, 8, 150], ['Leg Press', 4, 12, 90], ['Lying Leg Curls', 3, 12, 60],
+        ['Standing Calf Raises', 4, 20, 45],
+      ]),
+      tday('Braccia', [
+        ['Barbell Curl', 4, 10, 60], ['Hammer Curls', 3, 12, 60], ['Triceps Pushdown', 4, 12, 60],
+        ['Close-Grip Barbell Bench Press', 3, 10, 90],
+      ]),
+    ],
+  },
+  {
+    title: 'Arnold Split', goal: 'ipertrofia', level: 'avanzato',
+    description: 'Petto&Schiena / Spalle&Braccia / Gambe, alto volume.',
+    days_json: [
+      tday('Petto & Schiena', [
+        ['Barbell Bench Press - Medium Grip', 4, 10, 90], ['Incline Dumbbell Press', 3, 10, 90],
+        ['Pullups', 4, 10, 90], ['Bent Over Barbell Row', 4, 10, 90],
+      ]),
+      tday('Spalle & Braccia', [
+        ['Standing Military Press', 4, 10, 90], ['Side Lateral Raise', 3, 15, 60],
+        ['Barbell Curl', 4, 10, 60], ['Close-Grip Barbell Bench Press', 4, 10, 90],
+      ]),
+      tday('Gambe', [
+        ['Barbell Squat', 5, 10, 150], ['Romanian Deadlift', 4, 10, 120], ['Leg Press', 4, 15, 90],
+        ['Standing Calf Raises', 5, 20, 45],
+      ]),
+    ],
+  },
+  {
+    title: 'Full Body con manubri', goal: 'ipertrofia', level: 'principiante',
+    description: 'Solo manubri: perfetta per casa. 3 sedute a settimana.',
+    days_json: [
+      tday('Total Body', [
+        ['Dumbbell Bench Press', 3, 12, 90], ['Dumbbell Lunges', 3, 12, 90],
+        ['Incline Dumbbell Press', 3, 12, 90], ['Side Lateral Raise', 3, 15, 60],
+        ['Hammer Curls', 3, 12, 60], ['Concentration Curls', 3, 12, 60],
+      ]),
+    ],
+  },
+  {
+    title: 'A corpo libero', goal: 'dimagrimento', level: 'principiante',
+    description: 'Senza attrezzi (serve solo una sbarra per le trazioni).',
+    days_json: [
+      tday('Full Body', [
+        ['Pushups', 4, 15, 60], ['Bodyweight Squat', 4, 20, 60], ['Chin-Up', 4, 8, 90],
+        ['Plank', 3, 45, 60], ['Mountain Climbers', 3, 40, 45], ['Crunches', 3, 20, 45],
+      ]),
+    ],
+  },
+];
+
+await admin.from('workout_templates').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+await admin.from('workout_templates').insert(
+  templates.map((t) => ({ ...t, source: 'curated' }))
+);
+console.log(`  schede preconfezionate: ${templates.length}`);
+
+// =====================================================
+// Scheda di esempio per il member: solo nel reset completo
+// =====================================================
+if (!exercisesOnly) {
   await admin.from('workouts').delete().eq('member_id', memberId);
   await admin.from('workouts').insert({
     member_id: memberId,
     trainer_id: trainerId,
-    title: 'Full Body - Fase 1',
-    notes: 'Progressione su 4 settimane, 3 sedute a settimana.',
-    days_json: [
-      day('Giorno A — Spinta', [
-        ['Squat con bilanciere', 4, 10, 120],
-        ['Panca piana con bilanciere', 4, 8, 90],
-        ['Leg press', 3, 12, 90],
-      ]),
-      day('Giorno B — Tirata', [
-        ['Stacco da terra', 3, 6, 150],
-        ['Lat machine', 4, 10, 90],
-        ['Rematore con bilanciere', 3, 10, 90],
-      ]),
-      day('Giorno C — Cardio & Core', [
-        ['Tapis roulant', 1, 20, 60],
-        ['Plank', 3, 45, 60],
-        ['Crunch', 3, 15, 45],
-      ]),
-    ],
+    title: 'Full Body 3x',
+    notes: 'Scheda demo assegnata dal trainer.',
+    goal: templates[0].goal,
+    level: templates[0].level,
+    is_active: true,
+    days_json: templates[0].days_json, // riusa il programma Full Body 3x
   });
 }
 
 if (exercisesOnly) {
-  console.log('✅ Seed completato (solo esercizi).');
-  console.log('   Catalogo: %d esercizi/macchine (utenze/corsi/scheda non toccati).', catalog.length);
+  console.log('✅ Seed completato (solo esercizi + schede preconfezionate).');
+  console.log('   Catalogo: %d esercizi · %d schede preconfezionate (utenze/corsi non toccati).', index.length, templates.length);
 } else {
   console.log('✅ Seed completato (reset completo).');
   console.log('   Utenze (password: %s): admin@gym.local | trainer@gym.local | member@gym.local', PASSWORD);
-  console.log('   Catalogo: %d esercizi/macchine · 3 corsi · 1 scheda demo (3 giornate)', catalog.length);
+  console.log('   Catalogo: %d esercizi · 3 corsi · %d schede preconfezionate · 1 scheda demo', index.length, templates.length);
 }

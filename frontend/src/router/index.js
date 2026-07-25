@@ -51,8 +51,14 @@ const routes = [
         meta: { roles: ['member'] },
       },
       {
-        path: 'schede',
-        name: 'workouts',
+        path: 'clienti',
+        name: 'clients',
+        component: () => import('@/views/trainer/ClientsView.vue'),
+        meta: { roles: ['trainer', 'admin'] },
+      },
+      {
+        path: 'clienti/:memberId/schede',
+        name: 'client-workouts',
         component: () => import('@/views/trainer/WorkoutsView.vue'),
         meta: { roles: ['trainer', 'admin'] },
       },
@@ -60,6 +66,12 @@ const routes = [
         path: 'esercizi',
         name: 'exercises',
         component: () => import('@/views/trainer/ExercisesView.vue'),
+        meta: { roles: ['trainer', 'admin'] },
+      },
+      {
+        path: 'modelli',
+        name: 'templates',
+        component: () => import('@/views/trainer/TemplatesView.vue'),
         meta: { roles: ['trainer', 'admin'] },
       },
       {

@@ -27,6 +27,8 @@ const workoutBodySchema = {
   properties: {
     title: { type: 'string' },
     notes: { type: 'string' },
+    goal: { type: ['string', 'null'] }, // tipo/obiettivo (testo libero)
+    level: { type: ['string', 'null'] }, // livello (testo libero)
     days_json: {
       type: 'array',
       items: {

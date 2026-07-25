@@ -6,7 +6,11 @@
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api } from '@/lib/api';
-import { exerciseImageUrl } from '@/lib/storage';
+import ImageCarousel from '@/components/ImageCarousel.vue';
+
+// Immagini di un esercizio del catalogo: tutte (image_paths) o la sola copertina
+const exerciseImages = (ex) =>
+  ex?.image_paths?.length ? ex.image_paths : ex?.image_path ? [ex.image_path] : [];
 
 const route = useRoute();
 const router = useRouter();
@@ -235,25 +239,48 @@ onMounted(async () => {
           <Transition :name="direction === 'next' ? 'slide-next' : 'slide-prev'" mode="out-in">
             <div :key="index" class="overflow-hidden rounded-2xl bg-white shadow-sm">
               <div class="aspect-[16/9] bg-gray-100">
-                <img
-                  v-if="catalogById[current.exercise_id]?.image_path"
-                  :src="exerciseImageUrl(catalogById[current.exercise_id].image_path)"
+                <ImageCarousel
+                  :paths="exerciseImages(catalogById[current.exercise_id])"
                   :alt="catalogById[current.exercise_id]?.name"
-                  class="h-full w-full object-cover"
                 />
-                <div v-else class="flex h-full items-center justify-center text-6xl">🏋️</div>
               </div>
 
               <div class="p-4">
                 <p class="text-lg font-bold text-gray-900">
                   {{ catalogById[current.exercise_id]?.name || 'Esercizio' }}
                 </p>
-                <span
-                  v-if="catalogById[current.exercise_id]?.muscle_group"
-                  class="mt-1 inline-block rounded-full bg-brand/10 px-2 py-0.5 text-xs font-semibold text-brand"
+                <div class="mt-1 flex flex-wrap items-center gap-1">
+                  <span
+                    v-if="catalogById[current.exercise_id]?.muscle_group"
+                    class="inline-block rounded-full bg-brand/10 px-2 py-0.5 text-xs font-semibold text-brand"
+                  >
+                    {{ catalogById[current.exercise_id].muscle_group }}
+                  </span>
+                  <span
+                    v-if="catalogById[current.exercise_id]?.equipment"
+                    class="inline-block rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500"
+                  >
+                    {{ catalogById[current.exercise_id].equipment }}
+                  </span>
+                  <span
+                    v-if="catalogById[current.exercise_id]?.level"
+                    class="inline-block rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium capitalize text-gray-500"
+                  >
+                    {{ catalogById[current.exercise_id].level }}
+                  </span>
+                  <span
+                    v-if="catalogById[current.exercise_id]?.mechanic"
+                    class="inline-block rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium capitalize text-gray-500"
+                  >
+                    {{ catalogById[current.exercise_id].mechanic }}
+                  </span>
+                </div>
+                <p
+                  v-if="catalogById[current.exercise_id]?.secondary_muscles?.length"
+                  class="mt-1 text-xs text-gray-400"
                 >
-                  {{ catalogById[current.exercise_id].muscle_group }}
-                </span>
+                  Anche: {{ catalogById[current.exercise_id].secondary_muscles.join(', ') }}
+                </p>
 
                 <!-- Serie×ripetizioni e recupero, compatti (es. 4x10 · 1,30 min) -->
                 <div class="mt-2 flex items-center gap-4 text-sm text-gray-600">
@@ -278,7 +305,16 @@ onMounted(async () => {
                   </span>
                 </div>
 
-                <p v-if="catalogById[current.exercise_id]?.description" class="mt-3 text-xs text-gray-400">
+                <ol
+                  v-if="catalogById[current.exercise_id]?.instructions?.length"
+                  class="mt-3 list-decimal space-y-1 pl-4 text-xs text-gray-400"
+                >
+                  <li v-for="(step, si) in catalogById[current.exercise_id].instructions" :key="si">{{ step }}</li>
+                </ol>
+                <p
+                  v-else-if="catalogById[current.exercise_id]?.description"
+                  class="mt-3 text-xs text-gray-400"
+                >
                   {{ catalogById[current.exercise_id].description }}
                 </p>
                 <a
