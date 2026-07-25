@@ -205,9 +205,15 @@ async function complete() {
     // prossima sessione ritrova i valori impostati.
     let biometrics_json;
     if (hkSupported) {
-      await healthkit.stop();
-      if (hkUnsub) { hkUnsub(); hkUnsub = null; }
-      biometrics_json = await healthkit.summary(session.value.started_at, new Date().toISOString());
+      try {
+        await healthkit.stop();
+        if (hkUnsub) { hkUnsub(); hkUnsub = null; }
+        biometrics_json = await healthkit.summary(
+          new Date(session.value.started_at).toISOString(),
+          new Date().toISOString());
+      } catch {
+        // biometrici opzionali: non bloccare il completamento della sessione
+      }
     }
     await api.patch(`/api/sessions/${session.value.id}`, {
       exercises_log: session.value.exercises_log,
@@ -229,17 +235,21 @@ onMounted(async () => {
       api.get('/api/exercises'),
     ]);
     if (hkSupported && session.value && !session.value.completed_at) {
-      const auth = await healthkit.requestAuth();
-      if (auth.granted) {
-        hkUnsub = healthkit.onSample((s) => {
-          lastSampleAt.value = Date.now();
-          if (s.type === 'heartRate') liveHR.value = Math.round(s.value);
-          else if (s.type === 'activeEnergy') liveKcal.value = Math.round((liveKcal.value || 0) + s.value);
-        });
-        await healthkit.start();
+      try {
+        const auth = await healthkit.requestAuth();
+        if (auth.granted) {
+          hkUnsub = healthkit.onSample((s) => {
+            lastSampleAt.value = Date.now();
+            if (s.type === 'heartRate') liveHR.value = Math.round(s.value);
+            else if (s.type === 'activeEnergy') liveKcal.value = Math.round((liveKcal.value || 0) + s.value);
+          });
+          await healthkit.start();
+        }
+        // Tick periodico: rende hrStale reattivo (Date.now() da solo non è una dipendenza Vue)
+        hkTickInterval = setInterval(() => { now.value = Date.now(); }, 5000);
+      } catch {
+        // HealthKit opzionale: non deve bloccare il caricamento della sessione
       }
-      // Tick periodico: rende hrStale reattivo (Date.now() da solo non è una dipendenza Vue)
-      hkTickInterval = setInterval(() => { now.value = Date.now(); }, 5000);
     }
   } catch (e) {
     error.value = e.message;
