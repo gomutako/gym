@@ -6,16 +6,30 @@ versionamento [SemVer](https://semver.org/lang/it/).
 
 ## [Non rilasciato]
 
+## [1.5.0] — 2026-07-27
+
+Nuova identità visiva — rosa antico dal primario alle icone — e navigazione nativa
+nell'app iOS.
+
 ### Aggiunto
 - **Tab bar nativa su iOS**: nell'app la navigazione è ora una `UITabBar` di sistema —
   blur, tipografia e safe area gestite da UIKit — mentre il web continua a usare la barra
   HTML. Le voci restano definite in un unico modulo condiviso (`lib/nav-tabs.js`), così
   non possono divergere fra le due implementazioni.
+- **Icona dell'app e schermate di avvio col marchio del login**, in rosa antico: erano
+  ancora il manubrio indigo e la splash predefinita di Capacitor. Le splash hanno una
+  variante chiara e una scura, e sono generate da `scripts/make-app-icon.py`, che legge gli
+  hex dalla palette — così un cambio di brand le rifà tutte con un comando.
 
 ### Corretto
 - **I campi data non sbordano più**: su iOS hanno una larghezza minima propria che `w-full`
   non riusciva a ridurre, così invadevano il campo accanto (data di nascita, inizio e fine
-  di un abbonamento, data e ora di un corso) e risultavano anche più alti degli altri.
+  di un abbonamento, data e ora di un corso) e risultavano anche più alti degli altri. Le
+  combobox compatte sono state allineate all'altezza degli altri campi.
+- **Le modali e le liste delle combobox non scappano più con la tastiera aperta**: la
+  modale si ancora al viewport visibile invece che a quello di layout, quindi resta
+  nell'area libera sopra la tastiera. Resta un caso noto: in alcune situazioni la lista
+  della combobox si sgancia dal proprio campo finché non si scorre.
 - **Il fondo nativo dell'app iOS non è più nero**: quello predefinito era il colore di
   *sistema*, quindi con iOS in tema scuro restava nero anche con l'app in tema chiaro, e si
   notava nella zona di rimbalzo dello scroll. Ora è il fondo pagina vero e segue il tema
