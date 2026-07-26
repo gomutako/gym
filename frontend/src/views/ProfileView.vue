@@ -13,6 +13,7 @@ import { computeBmi, bmiCategory, computeAge, GENDER_LABEL } from '@/lib/body';
 import Modal from '@/components/Modal.vue';
 import Combobox from '@/components/Combobox.vue';
 import WorkoutDays from '@/components/WorkoutDays.vue';
+import AppCredits from '@/components/AppCredits.vue';
 
 const router = useRouter();
 const auth = useAuthStore();
@@ -683,5 +684,7 @@ async function logout() {
     >
       Esci
     </button>
+
+    <AppCredits />
   </div>
 </template>
