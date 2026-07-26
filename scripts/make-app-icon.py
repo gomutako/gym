@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Genera l'icona dell'app iOS a partire dal marchio del form di login.
+"""Genera icone e splash screen dell'app a partire dal marchio del form di login.
 
 Il marchio è quello di `views/LoginView.vue`: quadrato con gradiente dal primario
 al passo 400 della scala e, al centro, il manubrio bianco — cinque segmenti ad
@@ -11,9 +11,12 @@ palette: se il brand cambia, si rilancia questo script e l'icona segue.
 
     python3 scripts/make-app-icon.py
 
-Scrive l'icona dell'app iOS e quelle del web (apple-touch-icon e PWA) in RGB
-**senza canale alfa** e **senza angoli arrotondati**, come iOS richiede: la
-maschera la applica il sistema.
+Scrive:
+  - l'icona dell'app iOS e quelle del web (apple-touch-icon, PWA), col marchio a
+    tutto campo, in RGB **senza canale alfa** e **senza angoli arrotondati**, come
+    iOS richiede: la maschera la applica il sistema;
+  - le splash screen iOS, chiaro e scuro, col distintivo al centro sul fondo pagina
+    — cioè quello che si vede un istante dopo, quando l'app è pronta.
 """
 import re
 import struct
@@ -25,11 +28,22 @@ ROOT = Path(__file__).resolve().parent.parent
 PALETTE = ROOT / 'frontend/src/lib/palette.js'
 
 # Lo stesso marchio in tutti i posti dove l'app si presenta con un'icona.
-TARGETS = [
+ICONS = [
     (ROOT / 'frontend/ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png', 1024),
     (ROOT / 'frontend/public/apple-touch-icon.png', 180),
     (ROOT / 'frontend/public/pwa-192x192.png', 192),
     (ROOT / 'frontend/public/pwa-512x512.png', 512),
+]
+
+SPLASH_DIR = ROOT / 'frontend/ios/App/App/Assets.xcassets/Splash.imageset'
+# 2732 è il lato che si aspetta lo storyboard di Capacitor. L'immagine è quadrata e
+# viene ritagliata in `scaleAspectFill`: su un telefono se ne vede la fascia centrale,
+# quindi il distintivo va al centro e piccolo — l'11% del lato sono ~96pt a schermo.
+SPLASH_SIZE = 2732
+BADGE_RATIO = 0.11
+SPLASHES = [
+    (SPLASH_DIR / 'splash-light.png', '#F9FAFB'),  # gemello di `body` in style.css
+    (SPLASH_DIR / 'splash-dark.png', '#0F1115'),
 ]
 
 SS = 3  # supersampling per lato: 9 campioni per pixel, bordi lisci senza alfa
@@ -129,7 +143,82 @@ def write_png(path, rows, SIZE):
     path.write_bytes(png)
 
 
+def build_splash(SIZE, bg_hex):
+    """Fondo pagina con il distintivo del login al centro.
+
+    Il distintivo è il quadrato con angoli arrotondati (`rounded-2xl`, cioè un raggio
+    pari a un quarto del lato) col gradiente del brand e il manubrio bianco. Fuori dal
+    suo ingombro il fondo è piatto, quindi si riempie una riga alla volta senza
+    campionare: è ciò che rende sostenibile un'immagine da 2732 pixel di lato in
+    Python puro.
+    """
+    steps = brand_scale()
+    start, end = rgb(steps['600']), rgb(steps['400'])
+    bg = rgb(bg_hex)
+
+    badge = SIZE * BADGE_RATIO
+    bx0 = by0 = (SIZE - badge) / 2
+    bx1 = by1 = bx0 + badge
+    corner = badge * 0.25
+
+    # Manubrio dentro il distintivo, nelle stesse proporzioni del login (il glifo
+    # occupa metà del distintivo).
+    r = STROKE / 2
+    xs = [x for seg in SEGMENTS for x, _ in seg]
+    ys = [y for seg in SEGMENTS for _, y in seg]
+    scale = badge * 0.5 / 24
+    off_x = bx0 + (badge - 24 * scale) / 2
+    off_y = by0 + (badge - 24 * scale) / 2
+    radius = r * scale
+    segs = [((ax * scale + off_x, ay * scale + off_y), (bx * scale + off_x, by * scale + off_y))
+            for (ax, ay), (bx, by) in SEGMENTS]
+
+    def in_badge(px, py):
+        """Rettangolo con angoli arrotondati: distanza dal rettangolo interno."""
+        cx = min(max(px, bx0 + corner), bx1 - corner)
+        cy = min(max(py, by0 + corner), by1 - corner)
+        return ((px - cx) ** 2 + (py - cy) ** 2) ** 0.5 <= corner
+
+    flat_row = bytes(bg) * SIZE
+    rows = []
+    samples = SS * SS
+    for y in range(SIZE):
+        if y < by0 - 1 or y > by1 + 1:
+            rows.append(flat_row)
+            continue
+        row = bytearray(flat_row)
+        for x in range(int(bx0) - 1, int(bx1) + 2):
+            hits_badge = 0
+            hits_ink = 0
+            for sy in range(SS):
+                py = y + (sy + 0.5) / SS
+                for sx in range(SS):
+                    px = x + (sx + 0.5) / SS
+                    if not in_badge(px, py):
+                        continue
+                    hits_badge += 1
+                    if any(dist_to_segment(px, py, ax, ay, bx, by) <= radius
+                           for (ax, ay), (bx, by) in segs):
+                        hits_ink += 1
+            if not hits_badge:
+                continue
+            # Gradiente `to-br` interno al distintivo
+            t = ((x - bx0) + (y - by0)) / (2 * badge)
+            fill = [start[i] + (end[i] - start[i]) * t for i in range(3)]
+            # Prima il manubrio bianco sul gradiente, poi il distintivo sul fondo
+            ink = hits_ink / max(hits_badge, 1)
+            fill = [fill[i] + (255 - fill[i]) * ink for i in range(3)]
+            a = hits_badge / samples
+            px_color = bytes(round(bg[i] + (fill[i] - bg[i]) * a) for i in range(3))
+            row[x * 3:x * 3 + 3] = px_color
+        rows.append(bytes(row))
+    return rows
+
+
 if __name__ == '__main__':
-    for path, size in TARGETS:
+    for path, size in ICONS:
         write_png(path, build(size), size)
         print(f'scritta {path.relative_to(ROOT)} ({size}x{size}, RGB senza alfa)')
+    for path, bg in SPLASHES:
+        write_png(path, build_splash(SPLASH_SIZE, bg), SPLASH_SIZE)
+        print(f'scritta {path.relative_to(ROOT)} ({SPLASH_SIZE}x{SPLASH_SIZE}, fondo {bg})')
