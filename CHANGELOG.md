@@ -12,6 +12,18 @@ versionamento [SemVer](https://semver.org/lang/it/).
   HTML. Le voci restano definite in un unico modulo condiviso (`lib/nav-tabs.js`), così
   non possono divergere fra le due implementazioni.
 
+### Modificato
+- **Nuovo schema cromatico rosa antico**: il primario passa dall'indigo a una scala derivata
+  da `#D3919E` che ne conserva la tonalità su dieci passi — la tinta scelta vive su superfici,
+  chip, gradienti e tema scuro, i passi profondi portano testo e bottoni (il 300 ha 2,53:1 sul
+  bianco, il 600 ne ha 5,11). La stessa tinta è il colore di selezione della tab bar nativa
+  iOS, che ora segue anche il tema scelto nell'app e non quello di sistema.
+- **Chip riportate a sistema**: `rose` e `red` dicevano la stessa cosa e resta solo `red`,
+  che essendo più freddo del rosa antico continua a leggersi come segnale; le tonalità
+  seguono una forma canonica (chip `100`/`700`, banner `50`/`700`); il ruolo *trainer* lascia
+  l'indigo del vecchio brand per il celeste. Effetto collaterale: i banner d'errore, che
+  erano appena sotto la soglia di leggibilità, ora la superano.
+
 ## [1.4.0] — 2026-07-26
 
 Diagnostica di servizio, crediti, e una serie di correzioni all'interfaccia iOS emerse
