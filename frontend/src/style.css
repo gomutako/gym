@@ -21,9 +21,59 @@ body {
 }
 
 /* =====================================================
+   CAMPI DATA E ORA
+   Su iOS questi input hanno una larghezza INTRINSECA — il testo della data più il
+   padding interno del controllo nativo — che fa da minimo: `w-full` (width: 100%)
+   non li rimpicciolisce sotto quella soglia. Dentro un grid o un flex, dove
+   min-width vale `auto`, il contenitore non può stringersi più del contenuto, e
+   così il campo sborda e invade quello accanto (Data di nascita, Inizio/Fine di un
+   abbonamento, Data e ora di un corso).
+   `min-width: 0` azzera quel minimo — è quindi la riga che risolve — e
+   `appearance: none` toglie al controllo l'imbottitura nativa che lo rendeva più
+   alto degli altri campi.
+   Sta qui e non nelle viste perché vale per ogni campo data, anche quelli che
+   verranno.
+   ===================================================== */
+input[type='date'],
+input[type='datetime-local'],
+input[type='time'],
+input[type='month'] {
+  -webkit-appearance: none;
+  appearance: none;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Il valore di questi campi vive in uno pseudo-elemento con margini, imbottitura e
+   interlinea propri, che `appearance: none` lascia scoperti: a campo vuoto non ha
+   contenuto e il campo si accartoccia a pochi pixel, mentre valorizzato diventa più
+   alto degli altri input — quello che sembra un font diverso.
+   La cura è costringerlo a una riga ESATTA, la stessa degli altri campi: `1lh` è
+   l'interlinea dell'input, cioè quella che gli dà `text-sm` o `text-xs`, e
+   `line-height: inherit` impedisce al testo del valore di generare una riga più
+   alta. Il fallback in `em` serve ai motori senza l'unità `lh` (Safari < 16.4).
+   L'allineamento a sinistra serve perché su iOS il valore sarebbe centrato, a
+   differenza di ogni altro campo del form. */
+input[type='date']::-webkit-date-and-time-value,
+input[type='datetime-local']::-webkit-date-and-time-value,
+input[type='time']::-webkit-date-and-time-value,
+input[type='month']::-webkit-date-and-time-value {
+  /* `display: block` è la riga che pareggia l'altezza: da inline-block lo
+     pseudo-elemento porta con sé lo spazio del baseline — i pochi pixel sotto la
+     riga che facevano il campo più alto dei vicini a prescindere dal valore. */
+  display: block;
+  line-height: inherit;
+  margin: 0;
+  padding: 0;
+  height: 1.25em; /* fallback per i motori senza l'unità lh (Safari < 16.4) */
+  height: 1lh;
+  text-align: left;
+}
+
+/* =====================================================
    TEMA SCURO
    L'app usa un vocabolario ristretto di utility di colore (superfici bg-white,
-   pagina bg-gray-50, testo gray-900→400, stati emerald/amber/rose/red, brand).
+   pagina bg-gray-50, testo gray-900→400, stati emerald/amber/red, ruoli sky, brand).
    Invece di aggiungere una variante dark: a ogni classe in ogni vista, qui
    rimappiamo quelle utility sotto html.dark: copertura completa e coerente da
    un unico punto. La specificità (html.dark .classe) batte la singola utility.
@@ -62,24 +112,28 @@ html.dark .border-gray-200 { border-color: #2f343c; }
 html.dark .border-gray-100 { border-color: #23272e; }
 html.dark .divide-gray-50 > :not([hidden]) ~ :not([hidden]) { border-color: #23272e; }
 
-/* Brand: il fondo pieno resta (testo bianco leggibile); tinta e bordo si
-   schiariscono per staccare sul fondo scuro */
-html.dark .text-brand { color: #a5a0f5; }
-html.dark .border-brand { border-color: #6b64e8; }
-html.dark .bg-brand\/10 { background-color: rgba(129, 123, 240, 0.16); }
-html.dark .ring-brand { --tw-ring-color: #6b64e8; }
+/* Brand: il fondo pieno resta (testo bianco leggibile); tinta e bordo passano ai
+   passi chiari della scala, che sul fondo scuro sono quelli leggibili — il 300 è
+   esattamente il rosa scelto, e lì dà il meglio (6,68:1 sulla card) */
+html.dark .text-brand,
+html.dark .text-brand-700 { color: #D3919E; }
+html.dark .border-brand { border-color: #C87D8C; }
+html.dark .ring-brand { --tw-ring-color: #C87D8C; }
+html.dark .bg-brand\/10,
+html.dark .bg-brand-100 { background-color: rgba(211, 145, 158, 0.18); }
+
+/* Ruoli: il celeste del trainer, unica tinta fredda dello schema */
+html.dark .bg-sky-100 { background-color: rgba(56, 189, 248, 0.16); }
+html.dark .text-sky-700 { color: #7dd3fc; }
 
 /* Stati — su fondo scuro: riempimenti traslucidi + testo schiarito */
 html.dark .bg-red-50 { background-color: rgba(239, 68, 68, 0.14); }
-html.dark .text-red-600 { color: #f87171; }
-html.dark .bg-rose-50 { background-color: rgba(244, 63, 94, 0.14); }
-html.dark .bg-rose-100 { background-color: rgba(244, 63, 94, 0.2); }
-html.dark .text-rose-600,
-html.dark .text-rose-500 { color: #fb7185; }
-html.dark .border-rose-200 { border-color: rgba(244, 63, 94, 0.3); }
+html.dark .bg-red-100 { background-color: rgba(239, 68, 68, 0.2); }
+html.dark .border-red-200 { border-color: rgba(239, 68, 68, 0.3); }
+html.dark .text-red-500,
+html.dark .text-red-700 { color: #f87171; }
 html.dark .bg-emerald-50 { background-color: rgba(16, 185, 129, 0.14); }
 html.dark .bg-emerald-100 { background-color: rgba(16, 185, 129, 0.2); }
-html.dark .text-emerald-600 { color: #34d399; }
 html.dark .text-emerald-700 { color: #6ee7b7; }
 html.dark .bg-amber-50 { background-color: rgba(245, 158, 11, 0.14); }
 html.dark .bg-amber-100 { background-color: rgba(245, 158, 11, 0.2); }

@@ -77,12 +77,12 @@ function setMode(next) {
   <div class="relative flex min-h-screen items-center justify-center overflow-hidden bg-gray-50 px-6 py-10">
     <!-- Decorazioni sfocate (aurora) -->
     <div class="pointer-events-none absolute -left-24 -top-24 h-72 w-72 rounded-full bg-brand/30 blur-3xl"></div>
-    <div class="pointer-events-none absolute -bottom-24 -right-24 h-72 w-72 rounded-full bg-indigo-400/30 blur-3xl"></div>
+    <div class="pointer-events-none absolute -bottom-24 -right-24 h-72 w-72 rounded-full bg-brand-300/30 blur-3xl"></div>
 
     <div class="relative w-full max-w-sm">
       <!-- Logo + titolo -->
       <div class="mb-6 text-center">
-        <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-brand to-indigo-500 shadow-lg shadow-brand/30">
+        <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-brand to-brand-400 shadow-lg shadow-brand/30">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
                stroke-linecap="round" stroke-linejoin="round" class="h-8 w-8 text-white">
             <path d="M4 9v6M7 7v10M17 7v10M20 9v6M7 12h10" />
@@ -96,7 +96,7 @@ function setMode(next) {
 
       <!-- Card form -->
       <div class="rounded-3xl bg-white p-6 shadow-xl shadow-gray-900/5 ring-1 ring-gray-100">
-      <p v-if="mode === 'forgot' && resetSent" class="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-600">
+      <p v-if="mode === 'forgot' && resetSent" class="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
         Se l'email è registrata, riceverai un link per reimpostare la password. Controlla anche lo spam.
       </p>
 
@@ -176,14 +176,14 @@ function setMode(next) {
           </div>
         </div>
 
-        <p v-if="error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
+        <p v-if="error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
           {{ error }}
         </p>
 
         <button
           type="submit"
           :disabled="loading"
-          class="w-full rounded-xl bg-gradient-to-r from-brand to-indigo-500 py-3 font-semibold text-white shadow-lg shadow-brand/25 transition hover:brightness-105 active:scale-95 disabled:opacity-60"
+          class="w-full rounded-xl bg-gradient-to-r from-brand to-brand-400 py-3 font-semibold text-white shadow-lg shadow-brand/25 transition hover:brightness-105 active:scale-95 disabled:opacity-60"
         >
           {{ loading ? 'Attendere…' : mode === 'login' ? 'Accedi' : mode === 'register' ? 'Registrati' : 'Invia link di recupero' }}
         </button>

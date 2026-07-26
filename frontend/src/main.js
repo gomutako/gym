@@ -16,7 +16,8 @@ import './style.css';
 const app = createApp(App);
 app.use(createPinia());
 
-// Tema: applica la classe .dark (reagisce ai cambi di sistema in 'auto')
+// Tema: applica la classe .dark (reagisce ai cambi di sistema in 'auto') e, nell'app
+// iOS, allinea il lato nativo — vedi stores/theme.js
 useThemeStore().init();
 
 // Nel simulatore iOS la config punta a Supabase/backend locali, su device e web

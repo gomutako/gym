@@ -21,7 +21,7 @@ const subStatus = computed(() => {
 const statusLabel = { attivo: 'Attivo', scaduto: 'Scaduto', nessuno: 'Nessun abbonamento' };
 const statusClass = {
   attivo: 'bg-emerald-100 text-emerald-700',
-  scaduto: 'bg-rose-100 text-rose-700',
+  scaduto: 'bg-red-100 text-red-700',
   nessuno: 'bg-gray-100 text-gray-500',
 };
 

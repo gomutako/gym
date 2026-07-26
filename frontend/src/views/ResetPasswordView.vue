@@ -69,11 +69,11 @@ async function submit() {
         <p class="text-sm text-gray-500">Scegli una nuova password per il tuo account</p>
       </div>
 
-      <p v-if="done" class="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-600">
+      <p v-if="done" class="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
         Password aggiornata ✔ Reindirizzamento…
       </p>
 
-      <p v-else-if="!ready && !checking" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
+      <p v-else-if="!ready && !checking" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
         Link non valido o scaduto. Richiedi un nuovo reset dalla pagina di accesso.
       </p>
 
@@ -118,7 +118,7 @@ async function submit() {
           />
         </div>
 
-        <p v-if="error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{{ error }}</p>
+        <p v-if="error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
 
         <button
           type="submit" :disabled="saving || !ready"

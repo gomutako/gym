@@ -6,6 +6,47 @@ versionamento [SemVer](https://semver.org/lang/it/).
 
 ## [Non rilasciato]
 
+## [1.5.0] — 2026-07-27
+
+Nuova identità visiva — rosa antico dal primario alle icone — e navigazione nativa
+nell'app iOS.
+
+### Aggiunto
+- **Tab bar nativa su iOS**: nell'app la navigazione è ora una `UITabBar` di sistema —
+  blur, tipografia e safe area gestite da UIKit — mentre il web continua a usare la barra
+  HTML. Le voci restano definite in un unico modulo condiviso (`lib/nav-tabs.js`), così
+  non possono divergere fra le due implementazioni.
+- **Icona dell'app e schermate di avvio col marchio del login**, in rosa antico: erano
+  ancora il manubrio indigo e la splash predefinita di Capacitor. Le splash hanno una
+  variante chiara e una scura, e sono generate da `scripts/make-app-icon.py`, che legge gli
+  hex dalla palette — così un cambio di brand le rifà tutte con un comando.
+
+### Corretto
+- **I campi data non sbordano più**: su iOS hanno una larghezza minima propria che `w-full`
+  non riusciva a ridurre, così invadevano il campo accanto (data di nascita, inizio e fine
+  di un abbonamento, data e ora di un corso) e risultavano anche più alti degli altri. Le
+  combobox compatte sono state allineate all'altezza degli altri campi.
+- **Le modali e le liste delle combobox non scappano più con la tastiera aperta**: la
+  modale si ancora al viewport visibile invece che a quello di layout, quindi resta
+  nell'area libera sopra la tastiera. Resta un caso noto: in alcune situazioni la lista
+  della combobox si sgancia dal proprio campo finché non si scorre.
+- **Il fondo nativo dell'app iOS non è più nero**: quello predefinito era il colore di
+  *sistema*, quindi con iOS in tema scuro restava nero anche con l'app in tema chiaro, e si
+  notava nella zona di rimbalzo dello scroll. Ora è il fondo pagina vero e segue il tema
+  scelto nell'app, login compreso.
+
+### Modificato
+- **Nuovo schema cromatico rosa antico**: il primario passa dall'indigo a una scala derivata
+  da `#D3919E` che ne conserva la tonalità su dieci passi — la tinta scelta vive su superfici,
+  chip, gradienti e tema scuro, i passi profondi portano testo e bottoni (il 300 ha 2,53:1 sul
+  bianco, il 600 ne ha 5,11). La stessa tinta è il colore di selezione della tab bar nativa
+  iOS, che ora segue anche il tema scelto nell'app e non quello di sistema.
+- **Chip riportate a sistema**: `rose` e `red` dicevano la stessa cosa e resta solo `red`,
+  che essendo più freddo del rosa antico continua a leggersi come segnale; le tonalità
+  seguono una forma canonica (chip `100`/`700`, banner `50`/`700`); il ruolo *trainer* lascia
+  l'indigo del vecchio brand per il celeste. Effetto collaterale: i banner d'errore, che
+  erano appena sotto la soglia di leggibilità, ora la superano.
+
 ## [1.4.0] — 2026-07-26
 
 Diagnostica di servizio, crediti, e una serie di correzioni all'interfaccia iOS emerse
@@ -82,6 +123,54 @@ App iOS nativa e biometrici dell'allenamento letti da Apple Watch via HealthKit.
   schermata: **watchOS sincronizza i campioni sull'iPhone a blocchi con qualche minuto di
   ritardo**, quindi i primi minuti di allenamento non mostrano badge live, ma i dati
   vengono poi recuperati retroattivamente senza perdite.
+
+## [1.2.0] — 2026-07-25
+
+Catalogo esercizi completo, libreria di modelli di scheda e sezione clienti per i trainer.
+
+### Aggiunto
+- **Catalogo esercizi completo**: il seed importa l'intero free-exercise-db (~873 voci)
+  con metadati tradotti in italiano, tutte le immagini in carousel, istruzioni passo-passo
+  e video curati. Nuovi campi `equipment`, `category`, `force`, `level`, `mechanic`,
+  `secondary_muscles`, `instructions`, `image_paths`.
+- **Modelli di scheda** (`workout_templates`): libreria di programmi pronti, non legati a
+  un cliente, assegnabili con `POST /api/templates/:id/assign` che ne crea una copia.
+  Seed di ~8 programmi noti (PPL, Full Body, 5x5, Arnold split…).
+- **Sezione Clienti** per i trainer, con anagrafica e schede per singolo cliente.
+- Profilo con **dati fisici**: genere, data di nascita, altezza, peso, BMI derivato e note.
+- Filtri a combobox negli esercizi (gruppo, attrezzatura, livello, meccanica) e componenti
+  condivisi `Modal`, `Combobox`, `WorkoutDaysEditor`, `WorkoutDays`, `IdentityCard`.
+- Schede: campi obiettivo e livello, "salva come modello" e "nuova da modello".
+
+### Modificato
+- Redesign della schermata di login (logo, gradiente, card).
+
+## [1.1.0] — 2026-07-25
+
+Profilo self-service, abbonamenti come storico di periodi, tema scuro e statistiche.
+
+### Aggiunto
+- **Profilo self-service**: `GET`/`PATCH /api/profile` per nome, cognome, telefono e
+  avatar, senza poter toccare ruolo o abbonamento. Nome e cognome separati, con
+  `full_name` come colonna generata.
+- **Abbonamenti** come storico di periodi (tabella `subscriptions`), con un trigger che
+  mantiene `profiles.subscription_end_date` allineata al periodo più lontano.
+- **Tema chiaro / scuro / automatico**, applicato prima del render per evitare il flash.
+- **Statistiche di attività** nella dashboard member: allenamenti a settimana, volume e
+  gruppi muscolari (`ActivityStats`).
+- **Recupero password** con link dal login e vista `/reset-password`.
+- Stato delle schede: "in uso" (esclusiva) e "archiviata", con vincolo a livello di
+  database che impedisce a una scheda in uso di essere archiviata.
+- Pendenza (%) per serie sugli esercizi da tapis roulant; modifica del catalogo esercizi
+  via `PATCH /api/exercises/:id`; l'admin può modificare l'email di un utente.
+- Immagini reali e video per ogni esercizio nel seed.
+- Template email in italiano (recupero, conferma, cambio email) e SMTP di produzione
+  documentato — nessun mailserver sull'EC2.
+- `HANDOVER.md` per riprendere lo sviluppo su un'altra macchina.
+
+### Modificato
+- Viste utenti, schede e storico convertite in tabelle ordinabili e paginate; le `select`
+  sostituite dal componente `Combobox`; rimossa la barra del titolo superiore.
 
 ## [1.0.1] — 2026-07-24
 

@@ -42,6 +42,11 @@ const filtered = computed(() => {
 // Il campo mostra la selezione quando è chiuso, il testo digitato quando è aperto
 const display = computed(() => (open.value ? query.value : selectedLabel.value));
 
+// Il viewport VISIBILE, che con la tastiera aperta è più corto di quello di layout.
+// Lo spazio sopra e sotto l'input va misurato su questo: usando window.innerHeight
+// la lista si crede spazio dove c'è la tastiera, e finisce nascosta sotto di essa.
+const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+
 // Allinea la lista (fixed) all'input: larghezza uguale, sotto se c'è spazio,
 // altrimenti sopra; l'altezza è limitata allo spazio disponibile.
 function updatePosition() {
@@ -50,15 +55,19 @@ function updatePosition() {
   const r = el.getBoundingClientRect();
   const gap = 4;
   const maxList = 256; // deve combaciare con max-h-64
-  const spaceBelow = window.innerHeight - r.bottom - gap;
-  const spaceAbove = r.top - gap;
+  // Banda visibile, in coordinate di layout — le stesse di getBoundingClientRect e
+  // di `position: fixed`.
+  const viewTop = vv ? vv.offsetTop : 0;
+  const viewBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
+  const spaceBelow = viewBottom - r.bottom - gap;
+  const spaceAbove = r.top - viewTop - gap;
   const style = { left: `${r.left}px`, width: `${r.width}px` };
   if (spaceBelow >= Math.min(maxList, 160) || spaceBelow >= spaceAbove) {
     style.top = `${r.bottom + gap}px`;
-    style.maxHeight = `${Math.min(maxList, spaceBelow)}px`;
+    style.maxHeight = `${Math.max(0, Math.min(maxList, spaceBelow))}px`;
   } else {
     style.bottom = `${window.innerHeight - r.top + gap}px`;
-    style.maxHeight = `${Math.min(maxList, spaceAbove)}px`;
+    style.maxHeight = `${Math.max(0, Math.min(maxList, spaceAbove))}px`;
   }
   listStyle.value = style;
 }
@@ -119,6 +128,11 @@ function onClickOutside(e) {
 // La lista è fixed: mentre è aperta va riallineata se la pagina/un contenitore
 // scrolla o la finestra cambia dimensione (capture=true intercetta anche gli
 // scroll interni, es. il box della modale).
+//
+// La comparsa della tastiera su iOS non è nessuno di questi eventi: la WebView non
+// cambia dimensione, quindi non arriva un `resize`. Se ne accorge solo
+// `visualViewport`, ed è per questo che senza i suoi eventi la lista restava dov'era
+// mentre tutto il resto scorreva via.
 function onReposition() {
   if (open.value) updatePosition();
 }
@@ -132,11 +146,15 @@ onMounted(() => {
   document.addEventListener('mousedown', onClickOutside);
   window.addEventListener('scroll', onReposition, true);
   window.addEventListener('resize', onReposition);
+  vv?.addEventListener('resize', onReposition);
+  vv?.addEventListener('scroll', onReposition);
 });
 onBeforeUnmount(() => {
   document.removeEventListener('mousedown', onClickOutside);
   window.removeEventListener('scroll', onReposition, true);
   window.removeEventListener('resize', onReposition);
+  vv?.removeEventListener('resize', onReposition);
+  vv?.removeEventListener('scroll', onReposition);
 });
 </script>
 
@@ -153,7 +171,9 @@ onBeforeUnmount(() => {
         :placeholder="placeholder"
         class="w-full border border-gray-300 bg-white focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
         :class="[
-          dense ? 'rounded-lg py-1.5 pl-2 text-sm' : 'rounded-xl py-3 pl-4',
+          // py-2 come gli input di testo dell'app: con py-1.5 la combobox era 34px
+          // contro i 38 dei campi accanto, e nelle griglie a due colonne si vedeva.
+          dense ? 'rounded-lg py-2 pl-2 text-sm' : 'rounded-xl py-3 pl-4',
           // spazio a destra: una o due icone
           clearable ? (dense ? 'pr-12' : 'pr-16') : (dense ? 'pr-8' : 'pr-10'),
         ]"
@@ -203,7 +223,7 @@ onBeforeUnmount(() => {
         :aria-selected="opt.value === modelValue"
         class="flex cursor-pointer items-center gap-2 px-4 py-2 text-sm"
         :class="[
-          i === highlighted ? 'bg-brand/10 text-brand' : 'text-gray-700',
+          i === highlighted ? 'bg-brand/10 text-brand-700' : 'text-gray-700',
           opt.value === modelValue && 'font-semibold',
         ]"
         @mouseenter="highlighted = i"

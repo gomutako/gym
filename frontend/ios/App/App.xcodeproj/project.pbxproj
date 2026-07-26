@@ -18,6 +18,8 @@
 		A084ECDBA7D38E1E42DFC39D /* Pods_App.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AF277DCFFFF123FFC6DF26C7 /* Pods_App.framework */; };
 		A794929E59BA27A758E00BDC /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B091E74B5C053D4952BF1E1 /* ViewController.swift */; };
 		AC5812D8F3701CE392095145 /* HealthKitLivePlugin.m in Sources */ = {isa = PBXBuildFile; fileRef = 4D3351FD37CD850C1F55D76B /* HealthKitLivePlugin.m */; };
+		C1A70B0100000000000000A1 /* NativeTabBarPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A70B0100000000000000A3 /* NativeTabBarPlugin.swift */; };
+		C1A70B0100000000000000A2 /* NativeTabBarPlugin.m in Sources */ = {isa = PBXBuildFile; fileRef = C1A70B0100000000000000A4 /* NativeTabBarPlugin.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -32,6 +34,8 @@
 		504EC3131FED79650016851F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		50B271D01FEDC1A000F3C39B /* public */ = {isa = PBXFileReference; lastKnownFileType = folder; path = public; sourceTree = "<group>"; };
 		822B63A615EBDDCCAB21AE5E /* HealthKitLivePlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HealthKitLivePlugin.swift; sourceTree = "<group>"; };
+		C1A70B0100000000000000A3 /* NativeTabBarPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeTabBarPlugin.swift; sourceTree = "<group>"; };
+		C1A70B0100000000000000A4 /* NativeTabBarPlugin.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = NativeTabBarPlugin.m; sourceTree = "<group>"; };
 		8B091E74B5C053D4952BF1E1 /* ViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
 		A0805B5E94256E37D6187EDA /* App.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
 		AF277DCFFFF123FFC6DF26C7 /* Pods_App.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_App.framework; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -90,6 +94,8 @@
 				50B271D01FEDC1A000F3C39B /* public */,
 				822B63A615EBDDCCAB21AE5E /* HealthKitLivePlugin.swift */,
 				4D3351FD37CD850C1F55D76B /* HealthKitLivePlugin.m */,
+				C1A70B0100000000000000A3 /* NativeTabBarPlugin.swift */,
+				C1A70B0100000000000000A4 /* NativeTabBarPlugin.m */,
 				A0805B5E94256E37D6187EDA /* App.entitlements */,
 				8B091E74B5C053D4952BF1E1 /* ViewController.swift */,
 			);
@@ -221,6 +227,8 @@
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
 				7B99C9A816582C362AAB3A2F /* HealthKitLivePlugin.swift in Sources */,
 				AC5812D8F3701CE392095145 /* HealthKitLivePlugin.m in Sources */,
+				C1A70B0100000000000000A1 /* NativeTabBarPlugin.swift in Sources */,
+				C1A70B0100000000000000A2 /* NativeTabBarPlugin.m in Sources */,
 				A794929E59BA27A758E00BDC /* ViewController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

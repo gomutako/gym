@@ -23,7 +23,7 @@ function subStatus(m) {
 const statusLabel = { attivo: 'Attivo', scaduto: 'Scaduto', nessuno: '—' };
 const statusClass = {
   attivo: 'bg-emerald-100 text-emerald-700',
-  scaduto: 'bg-rose-100 text-rose-700',
+  scaduto: 'bg-red-100 text-red-700',
   nessuno: 'bg-gray-100 text-gray-500',
 };
 function fmtDate(d) {
@@ -101,7 +101,7 @@ onMounted(load);
 
 <template>
   <div class="space-y-4">
-    <p v-if="error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{{ error }}</p>
+    <p v-if="error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
 
     <h1 class="text-lg font-bold text-gray-900">Clienti</h1>
 

@@ -3,39 +3,12 @@
 // Le icone sono inline SVG per evitare dipendenze aggiuntive.
 import { computed } from 'vue';
 import { useAuthStore } from '@/stores/auth';
+import { tabsForRole } from '@/lib/nav-tabs';
 
 const auth = useAuthStore();
 
-// Tab per ruolo: la seconda voce differisce (Corsi per member, Schede per trainer)
-const tabs = computed(() => {
-  const home = { name: 'dashboard', label: 'Home', icon: 'home' };
-  const profile = { name: 'profile', label: 'Profilo', icon: 'user' };
-  const templates = { name: 'templates', label: 'Modelli', icon: 'stack' };
-  if (auth.role === 'admin') {
-    return [
-      home,
-      { name: 'users', label: 'Utenti', icon: 'group' },
-      { name: 'schedule', label: 'Corsi', icon: 'calendar' },
-      templates,
-      profile,
-    ];
-  }
-  if (auth.role === 'trainer') {
-    return [
-      home,
-      { name: 'clients', label: 'Clienti', icon: 'group' },
-      { name: 'exercises', label: 'Esercizi', icon: 'dumbbell' },
-      templates,
-      profile,
-    ];
-  }
-  return [
-    home,
-    { name: 'bookings', label: 'Corsi', icon: 'calendar' },
-    { name: 'training', label: 'Allena', icon: 'play' },
-    profile,
-  ];
-});
+// Le voci stanno in lib/nav-tabs.js perché le condivide con la tab bar nativa iOS.
+const tabs = computed(() => tabsForRole(auth.role));
 </script>
 
 <template>

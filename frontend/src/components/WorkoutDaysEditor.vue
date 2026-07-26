@@ -69,7 +69,7 @@ function moveExercise(di, ei, delta) {
         />
         <button
           title="Rimuovi giornata" aria-label="Rimuovi giornata"
-          class="shrink-0 rounded-lg bg-rose-50 p-2 text-rose-600 active:scale-90"
+          class="shrink-0 rounded-lg bg-red-50 p-2 text-red-700 active:scale-90"
           @click="removeDay(di)"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
@@ -165,7 +165,7 @@ function moveExercise(di, ei, delta) {
           </button>
           <button
             title="Rimuovi" aria-label="Rimuovi"
-            class="rounded p-1 text-rose-500 active:scale-90"
+            class="rounded p-1 text-red-500 active:scale-90"
             @click="removeExercise(di, ei)"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -175,7 +175,7 @@ function moveExercise(di, ei, delta) {
       </div>
 
       <button
-        class="mt-1 flex w-full items-center justify-center gap-1.5 rounded-lg bg-brand/10 py-2 text-xs font-semibold text-brand active:scale-95"
+        class="mt-1 flex w-full items-center justify-center gap-1.5 rounded-lg bg-brand/10 py-2 text-xs font-semibold text-brand-700 active:scale-95"
         @click="addExercise(di)"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"

@@ -16,18 +16,22 @@ const roleLabel = { admin: 'Admin', trainer: 'Trainer', member: 'Member' };
 const roleOptions = Object.entries(roleLabel).map(([value, label]) => ({ value, label }));
 const roleRank = { admin: 0, trainer: 1, member: 2 };
 
+// Forma canonica delle chip: fondo -100, testo -700 (prima "expired" stava a
+// 50/600, la stessa idea detta con tonalità diverse dalle altre viste).
 const badgeClass = {
   active: 'bg-emerald-100 text-emerald-700',
-  expired: 'bg-rose-50 text-rose-600',
+  expired: 'bg-red-100 text-red-700',
   scheduled: 'bg-amber-100 text-amber-700',
 };
 
-// Chip del ruolo. Tinte scelte fuori dalla scala verde/rosso/ambra usata dagli
-// abbonamenti: nella stessa riga convivono due chip, e riusare quei colori
-// farebbe leggere il ruolo come uno stato.
+// Chip del ruolo. Tinte fuori dalla scala verde/ambra/rossa degli stati: nella
+// stessa riga convivono due chip, e riusare quei colori farebbe leggere il ruolo
+// come uno stato. Il celeste del trainer sostituisce l'indigo, che era il colore
+// del vecchio brand ed era rimasto orfano. Il testo dell'admin è al passo 700 e
+// non al primario: sul fondo rosa tenue il 600 darebbe 4,24:1, sotto soglia.
 const roleBadgeClass = {
-  admin: 'bg-brand/10 text-brand',
-  trainer: 'bg-indigo-50 text-indigo-600',
+  admin: 'bg-brand-100 text-brand-700',
+  trainer: 'bg-sky-100 text-sky-700',
   member: 'bg-gray-100 text-gray-600',
 };
 
@@ -215,7 +219,7 @@ onMounted(load);
 <template>
   <div class="space-y-4">
     <h1 class="text-lg font-bold text-gray-900">Utenti</h1>
-    <p v-if="error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{{ error }}</p>
+    <p v-if="error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
 
     <input
       v-model="search" type="search" placeholder="Cerca nome, email, ruolo…"
@@ -367,7 +371,7 @@ onMounted(load);
                 <span class="rounded-full px-1.5 py-0.5 text-[10px] font-semibold" :class="badgeClass[subStatus(s)]">
                   {{ SUB_STATUS_LABEL[subStatus(s)] }}
                 </span>
-                <button class="rounded p-1 text-rose-500 active:scale-90" title="Elimina" @click="removeSub(editUser, s)">
+                <button class="rounded p-1 text-red-500 active:scale-90" title="Elimina" @click="removeSub(editUser, s)">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                        stroke-linecap="round" class="h-4 w-4"><path d="M6 6l12 12M18 6L6 18" /></svg>
                 </button>

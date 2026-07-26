@@ -126,7 +126,7 @@ onMounted(load);
 
 <template>
   <div class="space-y-5">
-    <p v-if="error && !formOpen" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{{ error }}</p>
+    <p v-if="error && !formOpen" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
 
     <!-- Toolbar: titolo e azione sulla stessa riga, come in Modelli -->
     <div class="flex items-center justify-between">
@@ -145,7 +145,7 @@ onMounted(load);
       :title="isEditing ? 'Modifica corso' : 'Nuovo corso'"
       @close="closeForm"
     >
-      <p v-if="error" class="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{{ error }}</p>
+      <p v-if="error" class="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
       <form class="space-y-3" @submit.prevent="submit">
         <div>
           <label class="mb-1 block text-xs font-medium text-gray-500">Nome corso</label>
@@ -235,7 +235,7 @@ onMounted(load);
                 Modifica
               </button>
               <button
-                class="rounded-lg bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-600"
+                class="rounded-lg bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700"
                 @click="remove(c.id)"
               >
                 Elimina

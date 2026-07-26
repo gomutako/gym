@@ -71,7 +71,7 @@ onMounted(load);
 <template>
   <div class="space-y-4">
     <h1 class="text-lg font-bold text-gray-900">Prenotazioni</h1>
-    <p v-if="error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
+    <p v-if="error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
       {{ error }}
     </p>
 
@@ -97,7 +97,7 @@ onMounted(load);
           <button
             v-if="bookedMap[c.id]"
             :disabled="busyId === c.id"
-            class="shrink-0 rounded-full bg-rose-100 px-4 py-2 text-sm font-semibold text-rose-600 active:scale-95 disabled:opacity-60"
+            class="shrink-0 rounded-full bg-red-100 px-4 py-2 text-sm font-semibold text-red-700 active:scale-95 disabled:opacity-60"
             @click="cancel(c.id)"
           >
             Annulla

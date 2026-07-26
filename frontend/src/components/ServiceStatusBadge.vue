@@ -27,7 +27,7 @@ const status = computed(() => (data.value ? overallStatus(data.value) : null));
 const dotClass = computed(() => ({
   ok: 'bg-emerald-500',
   warn: 'bg-amber-500',
-  down: 'bg-rose-500',
+  down: 'bg-red-500',
 }[status.value] || 'bg-gray-300'));
 
 const summary = computed(() => {
@@ -76,7 +76,7 @@ function fmtExpiry(date) {
       <div>
         <div class="flex items-center justify-between">
           <span class="font-semibold text-gray-700">Backend</span>
-          <span :class="data.backend.ok ? 'text-emerald-600' : 'text-rose-600'">
+          <span :class="data.backend.ok ? 'text-emerald-700' : 'text-red-700'">
             {{ data.backend.ok ? 'ok' : 'non raggiungibile' }} · {{ fmtMs(data.backend.latencyMs) }}
           </span>
         </div>
@@ -91,12 +91,12 @@ function fmtExpiry(date) {
       <div>
         <div class="flex items-center justify-between">
           <span class="font-semibold text-gray-700">Supabase</span>
-          <span :class="data.supabase.ok ? 'text-emerald-600' : 'text-rose-600'">
+          <span :class="data.supabase.ok ? 'text-emerald-700' : 'text-red-700'">
             {{ data.supabase.ok ? 'ok' : 'non raggiungibile' }} · {{ fmtMs(data.supabase.latencyMs) }}
           </span>
         </div>
         <p class="text-gray-400">{{ data.supabase.url }}</p>
-        <p v-if="data.supabase.error" class="text-rose-600">{{ data.supabase.error }}</p>
+        <p v-if="data.supabase.error" class="text-red-700">{{ data.supabase.error }}</p>
       </div>
 
       <!-- Ambiente e sessione -->
