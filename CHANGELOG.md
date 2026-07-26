@@ -7,6 +7,13 @@ versionamento [SemVer](https://semver.org/lang/it/).
 ## [Non rilasciato]
 
 ### Aggiunto
+- **Badge stato servizi** nella dashboard admin: ambiente attivo (cloud o locale), stato
+  e latenza di backend e Supabase, versione del backend a confronto con quella dell'app,
+  uptime del servizio e scadenza della sessione. Tre livelli — verde, giallo, rosso —
+  dove il giallo segnala il caso in cui tutto risponde ma le versioni non combaciano: è
+  il guasto che non si manifesta da sé, perché un backend più vecchio scarta in silenzio
+  i campi che non conosce. Alimentato dalla nuova rotta `GET /api/admin/diagnostics`,
+  protetta da `requireRole('admin')`; `/api/health` resta pubblico e invariato.
 - La descrizione dell'esecuzione nella card dell'esercizio è **troncata** (un passo, o due
   righe di testo discorsivo) con un **"Leggi tutto"** allineato a destra: durante
   l'allenamento servono a colpo d'occhio le serie, non una decina di passi di istruzioni.
