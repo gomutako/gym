@@ -70,6 +70,7 @@ onMounted(load);
 
 <template>
   <div class="space-y-4">
+    <h1 class="text-lg font-bold text-gray-900">Prenotazioni</h1>
     <p v-if="error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
       {{ error }}
     </p>

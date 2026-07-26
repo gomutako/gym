@@ -6,6 +6,51 @@ versionamento [SemVer](https://semver.org/lang/it/).
 
 ## [Non rilasciato]
 
+## [1.4.0] — 2026-07-26
+
+Diagnostica di servizio, crediti, e una serie di correzioni all'interfaccia iOS emerse
+dall'uso sul device.
+
+### Aggiunto
+- **Versione e crediti** in fondo al profilo di ogni utente: fonte del catalogo esercizi
+  (free-exercise-db, pubblico dominio), librerie open source con licenza MIT, e una nota
+  su come vengono trattati i dati di Apple Health. Le due categorie restano distinte
+  perché lo sono anche giuridicamente: la prima è cortesia, la seconda è dovuta.
+- **Filtri per ruolo e stato abbonamento** nella sezione Utenti, combinabili con la
+  ricerca. Lo stato include "Senza abbonamento", perché le popolazioni sono tre e chi non
+  ne ha mai avuto uno non è "scaduto".
+- Il **ruolo** nella tabella utenti è ora una chip colorata, con tinte fuori dalla scala
+  usata dagli abbonamenti per non farlo leggere come uno stato.
+- **Titoli di pagina** su Profilo, Utenti, Prenotazioni, Allena, Esercizi e Corsi.
+- **Badge stato servizi** nella dashboard admin: ambiente attivo (cloud o locale), stato
+  e latenza di backend e Supabase, versione del backend a confronto con quella dell'app,
+  uptime del servizio e scadenza della sessione. Tre livelli — verde, giallo, rosso —
+  dove il giallo segnala il caso in cui tutto risponde ma le versioni non combaciano: è
+  il guasto che non si manifesta da sé, perché un backend più vecchio scarta in silenzio
+  i campi che non conosce. Alimentato dalla nuova rotta `GET /api/admin/diagnostics`,
+  protetta da `requireRole('admin')`; `/api/health` resta pubblico e invariato.
+- La descrizione dell'esecuzione nella card dell'esercizio è **troncata** (un passo, o due
+  righe di testo discorsivo) con un **"Leggi tutto"** allineato a destra: durante
+  l'allenamento servono a colpo d'occhio le serie, non una decina di passi di istruzioni.
+  Il tasto compare solo quando c'è davvero altro da leggere, e cambiando esercizio la
+  descrizione torna corta da sola.
+
+### Corretto
+- **Il contenuto finiva incollato alla tab bar**: `pb-24` (96px) copriva a malapena la
+  nav, che è alta ~61px **più** `env(safe-area-inset-bottom)` (34px sui device con home
+  indicator). Ora la safe-area entra nel calcolo del padding invece di essere assorbita.
+- **Lo scroll si fermava di colpo, senza rimbalzo di fine lista**: Capacitor forza
+  `scrollView.bounces = false` in `CAPBridgeViewController` e non espone un'opzione per
+  cambiarlo, quindi nessuna regola CSS poteva ripristinarlo. Sovrascritto in
+  `ViewController.viewDidLoad()`; rimosso anche `overscroll-behavior-y: none`, che
+  bloccava la stessa elasticità dal lato web.
+- iOS zoomava sul campo a ogni focus: la maggior parte dei form usa `text-sm` (14px) e
+  sotto i 16px la WKWebView ingrandisce da sé. Bloccata la scala nel meta viewport
+  (`maximum-scale=1, user-scalable=no`), come nel template Capacitor. Nota: Safari mobile
+  ignora `user-scalable` dal 2016, quindi sul sito web lo zoom sui campi resta.
+- L'**intestazione del profilo** occupava mezzo schermo prima di mostrare un dato utile:
+  avatar e dati ora sono affiancati, con l'azione di modifica come icona.
+
 ## [1.3.0] — 2026-07-26
 
 App iOS nativa e biometrici dell'allenamento letti da Apple Watch via HealthKit.

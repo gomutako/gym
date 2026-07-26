@@ -21,4 +21,18 @@ class ViewController: CAPBridgeViewController {
     override func capacitorDidLoad() {
         bridge?.registerPluginInstance(HealthKitLivePlugin())
     }
+
+    /// Ripristina il rimbalzo elastico di fine lista.
+    ///
+    /// `CAPBridgeViewController.prepareWebView` forza `scrollView.bounces = false` e non
+    /// espone alcuna opzione per cambiarlo (`ios.scrollEnabled` accende o spegne lo
+    /// scroll, non l'elasticità). Essendo una proprietà della scroll view nativa, dal
+    /// lato web non è raggiungibile: nessuna regola CSS — `overscroll-behavior` inclusa
+    /// — può riaccenderla. Va quindi sovrascritta qui, dopo che il bridge ha preparato
+    /// la web view.
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        webView?.scrollView.bounces = true
+        webView?.scrollView.alwaysBounceVertical = true
+    }
 }

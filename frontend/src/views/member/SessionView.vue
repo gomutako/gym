@@ -41,6 +41,25 @@ const catalogById = computed(() =>
 const log = computed(() => session.value?.exercises_log || []);
 const current = computed(() => log.value[index.value] || null);
 
+// --- Descrizione dell'esecuzione: troncata, espandibile ---
+// Durante l'allenamento servono a colpo d'occhio le serie da fare, non un muro di
+// testo tra la durata e il video: le istruzioni del catalogo arrivano a una decina
+// di passi. Si mostrano i primi COLLAPSED_STEPS (o poche righe di description) con
+// un tasto per il resto.
+const COLLAPSED_STEPS = 1;
+const COLLAPSED_CHARS = 90;
+const descExpanded = ref(false);
+
+const exInfo = computed(() => catalogById.value[current.value?.exercise_id] || null);
+const steps = computed(() => exInfo.value?.instructions || []);
+const shownSteps = computed(() =>
+  descExpanded.value ? steps.value : steps.value.slice(0, COLLAPSED_STEPS));
+// Il tasto compare solo se c'è davvero altro da leggere, altrimenti è rumore.
+const descTruncatable = computed(() =>
+  steps.value.length
+    ? steps.value.length > COLLAPSED_STEPS
+    : (exInfo.value?.description || '').length > COLLAPSED_CHARS);
+
 const saved = computed(() => session.value?.biometrics_json || null);
 const badgeHR = computed(() => (hkSupported && !session.value?.completed_at) ? liveHR.value : saved.value?.hr_avg ?? null);
 const badgeKcal = computed(() => {
@@ -107,6 +126,7 @@ function go(i) {
   if (i < 0 || i >= log.value.length) return;
   direction.value = i > index.value ? 'next' : 'prev';
   index.value = i;
+  descExpanded.value = false; // ogni esercizio riparte con la descrizione corta
 }
 const next = () => go(index.value + 1);
 const prev = () => go(index.value - 1);
@@ -403,17 +423,26 @@ onMounted(async () => {
                 </div>
 
                 <ol
-                  v-if="catalogById[current.exercise_id]?.instructions?.length"
+                  v-if="steps.length"
                   class="mt-3 list-decimal space-y-1 pl-4 text-xs text-gray-400"
                 >
-                  <li v-for="(step, si) in catalogById[current.exercise_id].instructions" :key="si">{{ step }}</li>
+                  <li v-for="(step, si) in shownSteps" :key="si">{{ step }}</li>
                 </ol>
                 <p
-                  v-else-if="catalogById[current.exercise_id]?.description"
+                  v-else-if="exInfo?.description"
                   class="mt-3 text-xs text-gray-400"
+                  :class="{ 'line-clamp-2': !descExpanded }"
                 >
-                  {{ catalogById[current.exercise_id].description }}
+                  {{ exInfo.description }}
                 </p>
+                <button
+                  v-if="descTruncatable"
+                  type="button"
+                  class="mt-1 ml-auto block text-xs font-semibold text-brand active:scale-95"
+                  @click="descExpanded = !descExpanded"
+                >
+                  {{ descExpanded ? 'Mostra meno' : 'Leggi tutto' }}
+                </button>
                 <a
                   v-if="catalogById[current.exercise_id]?.video_url"
                   :href="catalogById[current.exercise_id].video_url"

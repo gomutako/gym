@@ -13,6 +13,7 @@ import { computeBmi, bmiCategory, computeAge, GENDER_LABEL } from '@/lib/body';
 import Modal from '@/components/Modal.vue';
 import Combobox from '@/components/Combobox.vue';
 import WorkoutDays from '@/components/WorkoutDays.vue';
+import AppCredits from '@/components/AppCredits.vue';
 
 const router = useRouter();
 const auth = useAuthStore();
@@ -278,35 +279,44 @@ async function logout() {
 
 <template>
   <div class="space-y-5">
+    <h1 class="text-lg font-bold text-gray-900">Profilo</h1>
     <p v-if="error && !editing" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{{ error }}</p>
     <p v-if="message" class="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-600">{{ message }}</p>
 
-    <!-- Intestazione profilo -->
-    <div class="flex flex-col items-center rounded-2xl bg-white p-6 shadow-sm">
-      <div class="relative">
-        <div class="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-brand/10 text-3xl">
+    <!-- Intestazione profilo: avatar a sinistra, dati di fianco. La disposizione
+         verticale centrata occupava mezzo schermo su mobile prima ancora di
+         mostrare un dato utile. -->
+    <div class="rounded-2xl bg-white p-4 shadow-sm">
+      <div class="flex items-center gap-3">
+        <div class="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand/10 text-2xl">
           <img v-if="shownAvatar" :src="shownAvatar" alt="" class="h-full w-full object-cover" />
           <template v-else>👤</template>
         </div>
-      </div>
-      <p class="mt-3 text-lg font-bold text-gray-900">{{ fullName }}</p>
-      <p class="text-sm text-gray-500">{{ user?.email }}</p>
-      <p v-if="phone" class="text-sm text-gray-500">{{ phone }}</p>
-      <span class="mt-2 rounded-full bg-brand/10 px-3 py-1 text-xs font-semibold text-brand">
-        {{ roleLabel[role] || role }}
-      </span>
 
-      <button
-        v-if="!editing"
-        class="mt-4 flex items-center gap-1.5 rounded-lg border border-brand px-4 py-2 text-sm font-semibold text-brand active:scale-95"
-        @click="startEdit"
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
-             stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
-          <path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
-        </svg>
-        Modifica profilo
-      </button>
+        <!-- min-w-0: senza, il testo lungo sfonda il flex invece di troncarsi -->
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-2">
+            <p class="truncate font-bold text-gray-900">{{ fullName }}</p>
+            <span class="shrink-0 rounded-full bg-brand/10 px-2 py-0.5 text-[11px] font-semibold text-brand">
+              {{ roleLabel[role] || role }}
+            </span>
+          </div>
+          <p class="truncate text-xs text-gray-500">{{ user?.email }}</p>
+          <p v-if="phone" class="truncate text-xs text-gray-500">{{ phone }}</p>
+        </div>
+
+        <button
+          v-if="!editing"
+          class="shrink-0 rounded-lg border border-brand p-2 text-brand active:scale-95"
+          aria-label="Modifica profilo"
+          @click="startEdit"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+               stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+            <path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+          </svg>
+        </button>
+      </div>
     </div>
 
     <!-- Dati fisici (read-only) -->
@@ -683,5 +693,7 @@ async function logout() {
     >
       Esci
     </button>
+
+    <AppCredits />
   </div>
 </template>
