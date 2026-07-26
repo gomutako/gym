@@ -4,9 +4,11 @@
 // sono azioni globali da ospitare in alto.
 //
 // Su iOS nativo la navigazione è una UITabBar di sistema, disegnata FUORI dalla
-// WebView: lì la BottomNav HTML non va montata (sarebbero due barre) e non
-// serve il padding inferiore, perché è la WebView stessa a fermarsi sopra la
-// barra. Sul web resta tutto com'era.
+// WebView: lì la BottomNav HTML non va montata (sarebbero due barre). Il padding
+// inferiore serve comunque, ma vale l'altezza della barra nativa
+// (`--native-tabbar-height`, pubblicata da lib/native-tabbar.js) invece
+// dell'altezza della barra HTML: la WebView resta a schermo pieno e il contenuto
+// scorre dietro il blur della barra. Sul web resta tutto com'era.
 import { computed, watch, onMounted, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
@@ -70,11 +72,16 @@ watch(currentTab, (name) => {
     <!-- Contenuto: pt rispetta la safe-area (notch). Sul web il pb deve superare
          l'ALTEZZA REALE della nav, che è ~61px + env(safe-area-inset-bottom): con
          il vecchio pb-24 (96px) su un iPhone con home indicator (34px) restava 1px
-         scarso e il contenuto finiva incollato alla tab bar. Su iOS nativo non
-         serve nulla di tutto questo: la WebView finisce dove inizia la barra. -->
+         scarso e il contenuto finiva incollato alla tab bar. Su iOS nativo l'altezza
+         la dice il nativo (--native-tabbar-height, home indicator già incluso), più
+         1rem di respiro. -->
     <main
       class="flex-1 px-4 pt-[calc(env(safe-area-inset-top)+1rem)]"
-      :class="native ? 'pb-4' : 'pb-[calc(env(safe-area-inset-bottom)+6rem)]'"
+      :class="
+        native
+          ? 'pb-[calc(var(--native-tabbar-height,0px)+1rem)]'
+          : 'pb-[calc(env(safe-area-inset-bottom)+6rem)]'
+      "
     >
       <RouterView />
     </main>

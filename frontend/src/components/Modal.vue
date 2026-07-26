@@ -55,11 +55,14 @@ onBeforeUnmount(() => {
   >
     <div
       v-if="open"
-      class="fixed inset-0 z-40 flex items-end justify-center bg-black/40 p-4 sm:items-center"
+      class="fixed inset-0 z-40 flex items-end justify-center bg-black/40 px-4 pt-4 pb-[calc(1rem+var(--native-tabbar-height,0px))] sm:items-center"
       role="dialog"
       aria-modal="true"
       @click.self="close"
     >
+      <!-- Il pb del contenitore tiene conto della tab bar nativa iOS (0px sul web,
+           dove non c'è): essendo un foglio ancorato in basso, senza quello finirebbe
+           dietro la barra. -->
       <div class="max-h-[85vh] w-full max-w-sm overflow-y-auto rounded-2xl bg-white p-4 shadow-xl">
         <div class="mb-3 flex items-center justify-between gap-3">
           <h2 class="font-semibold text-gray-900">{{ title }}</h2>

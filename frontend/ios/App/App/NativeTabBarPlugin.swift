@@ -2,23 +2,43 @@ import Foundation
 import Capacitor
 import UIKit
 
+/// `UITabBar` che avvisa quando la propria altezza cambia.
+///
+/// L'altezza non è una costante: 49pt più l'home indicator in verticale, meno in
+/// orizzontale (dove l'indicator non c'è), diversa ancora su iPad. Il CSS deve
+/// riservare esattamente quello spazio, quindi il valore va comunicato, non
+/// indovinato.
+private final class HeightReportingTabBar: UITabBar {
+    var onHeightChange: ((CGFloat) -> Void)?
+    private var lastHeight: CGFloat = 0
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard abs(bounds.height - lastHeight) > 0.5 else { return }
+        lastHeight = bounds.height
+        onHeightChange?(bounds.height)
+    }
+}
+
 /// Tab bar di sistema per la sola app iOS.
 ///
-/// È una `UITabBar` messa **accanto** alla WebView, non un `UITabBarController`: il
+/// È una `UITabBar` messa **sopra** la WebView, non un `UITabBarController`: il
 /// contenuto è un'unica `WKWebView` che non cambia mai, quindi i view controller per
 /// tab sarebbero fittizi e andrebbe impedito loro di ricreare la WebView a ogni
 /// cambio tab. Una `UITabBar` come subview dà lo stesso blur, la stessa altezza e la
 /// stessa gestione della safe area, con una frazione del codice.
 ///
+/// La WebView resta a schermo pieno e il contenuto scorre **dietro** la barra
+/// traslucida, come nelle app di sistema: ritagliarla sopra la barra spegnerebbe
+/// l'effetto. A non far finire il contenuto sotto la barra pensa il CSS, con
+/// l'altezza che questo plugin restituisce (e rimanda a ogni cambio via
+/// `heightChanged`).
+///
 /// Le voci arrivano dal JS — è lì che si conosce il ruolo — e il tocco torna indietro
 /// come evento `tabSelected`. Il nativo non decide nulla.
-///
-/// La geometria della WebView non la tocca questo plugin ma `ViewController`
-/// (`pinWebViewBottom(to:)`): la WebView è la root view del controller e va prima
-/// spostata in un contenitore, cosa che il controller fa già al primo caricamento.
 @objc(NativeTabBarPlugin)
 public class NativeTabBarPlugin: CAPPlugin, UITabBarDelegate {
-    private var tabBar: UITabBar?
+    private var tabBar: HeightReportingTabBar?
 
     /// Nomi delle rotte Vue, nello stesso ordine degli item: il `tag` dell'item è
     /// l'indice in questo array.
@@ -39,10 +59,14 @@ public class NativeTabBarPlugin: CAPPlugin, UITabBarDelegate {
                 return
             }
 
-            let bar = self.tabBar ?? UITabBar()
+            let bar = self.tabBar ?? HeightReportingTabBar()
             if self.tabBar == nil {
                 bar.delegate = self
                 bar.translatesAutoresizingMaskIntoConstraints = false
+                bar.onHeightChange = { [weak self] height in
+                    guard self?.tabBar?.isHidden == false else { return }
+                    self?.notifyListeners("heightChanged", data: ["height": height])
+                }
                 host.addSubview(bar)
                 // Il bordo inferiore va sul fondo del contenitore, non sulla safe
                 // area: è `UITabBar` stessa a crescere per coprire l'home indicator.
@@ -71,9 +95,9 @@ public class NativeTabBarPlugin: CAPPlugin, UITabBarDelegate {
             bar.setItems(items, animated: false)
             self.names = newNames
 
-            self.setVisible(true)
+            bar.isHidden = false
             self.select(selected)
-            call.resolve()
+            call.resolve(["height": self.currentHeight()])
         }
     }
 
@@ -90,15 +114,17 @@ public class NativeTabBarPlugin: CAPPlugin, UITabBarDelegate {
 
     @objc func show(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
-            self.setVisible(true)
-            call.resolve()
+            self.tabBar?.isHidden = false
+            call.resolve(["height": self.currentHeight()])
         }
     }
 
+    /// Nasconde la barra. L'altezza restituita è 0: il contenuto può riprendersi
+    /// lo spazio che le era riservato.
     @objc func hide(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
-            self.setVisible(false)
-            call.resolve()
+            self.tabBar?.isHidden = true
+            call.resolve(["height": 0])
         }
     }
 
@@ -110,9 +136,18 @@ public class NativeTabBarPlugin: CAPPlugin, UITabBarDelegate {
     // MARK: - Interni
 
     /// Il contenitore creato da `ViewController`: la barra gli va aggiunta come
-    /// sorella della WebView.
+    /// sorella della WebView, sopra di essa.
     private var host: UIView? {
         (bridge?.viewController as? ViewController)?.view
+    }
+
+    /// Altezza in punti (= px CSS nella WebView), 0 se la barra non c'è o è
+    /// nascosta. Il layout va forzato: appena creata la barra non ha ancora un
+    /// frame, e risponderebbe 0.
+    private func currentHeight() -> CGFloat {
+        guard let bar = tabBar, !bar.isHidden else { return 0 }
+        bar.superview?.layoutIfNeeded()
+        return bar.bounds.height
     }
 
     private func select(_ name: String?) {
@@ -122,15 +157,5 @@ public class NativeTabBarPlugin: CAPPlugin, UITabBarDelegate {
               let items = bar.items,
               idx < items.count else { return }
         bar.selectedItem = items[idx]
-    }
-
-    /// Mostra o nasconde la barra restituendo alla WebView l'altezza che le spetta:
-    /// senza spostare il vincolo, da nascosta resterebbe una fascia vuota dove
-    /// stava la barra.
-    private func setVisible(_ visible: Bool) {
-        guard let bar = tabBar,
-              let vc = bridge?.viewController as? ViewController else { return }
-        bar.isHidden = !visible
-        vc.pinWebViewBottom(to: visible ? bar.topAnchor : nil)
     }
 }
