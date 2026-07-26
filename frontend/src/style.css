@@ -21,6 +21,30 @@ body {
 }
 
 /* =====================================================
+   CAMPI DATA E ORA
+   Su iOS questi input hanno una larghezza INTRINSECA — il testo della data più il
+   padding interno del controllo nativo — che fa da minimo: `w-full` (width: 100%)
+   non li rimpicciolisce sotto quella soglia. Dentro un grid o un flex, dove
+   min-width vale `auto`, il contenitore non può stringersi più del contenuto, e
+   così il campo sborda e invade quello accanto (Data di nascita, Inizio/Fine di un
+   abbonamento, Data e ora di un corso).
+   `min-width: 0` azzera quel minimo — è quindi la riga che risolve — e
+   `appearance: none` toglie al controllo l'imbottitura nativa che lo rendeva più
+   alto degli altri campi.
+   Sta qui e non nelle viste perché vale per ogni campo data, anche quelli che
+   verranno.
+   ===================================================== */
+input[type='date'],
+input[type='datetime-local'],
+input[type='time'],
+input[type='month'] {
+  -webkit-appearance: none;
+  appearance: none;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* =====================================================
    TEMA SCURO
    L'app usa un vocabolario ristretto di utility di colore (superfici bg-white,
    pagina bg-gray-50, testo gray-900→400, stati emerald/amber/red, ruoli sky, brand).
