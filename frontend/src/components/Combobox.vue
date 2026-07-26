@@ -171,7 +171,9 @@ onBeforeUnmount(() => {
         :placeholder="placeholder"
         class="w-full border border-gray-300 bg-white focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
         :class="[
-          dense ? 'rounded-lg py-1.5 pl-2 text-sm' : 'rounded-xl py-3 pl-4',
+          // py-2 come gli input di testo dell'app: con py-1.5 la combobox era 34px
+          // contro i 38 dei campi accanto, e nelle griglie a due colonne si vedeva.
+          dense ? 'rounded-lg py-2 pl-2 text-sm' : 'rounded-xl py-3 pl-4',
           // spazio a destra: una o due icone
           clearable ? (dense ? 'pr-12' : 'pr-16') : (dense ? 'pr-8' : 'pr-10'),
         ]"
