@@ -36,8 +36,48 @@ Non esistono test unitari configurati: la verifica si fa con **script e2e usa-e-
 ### Ambiente / gotcha
 - **Docker** serve solo per Supabase; il codice si scrive/builda senza. La CLI Supabase (`supabase`) è una devDependency della root → invocarla con `npx supabase` o via script `db:*`.
 - La shell dell'agente **non è nel gruppo `docker`** di default: prefissare i comandi Supabase con `sg docker -c "..."`.
-- ⚠️ **Non usare `pkill`/`pgrep -f "backend/src/server.js"`**: il pattern matcha la riga di comando della shell stessa → auto-SIGTERM (exit 144, nessun output). Avviare il server con `node backend/src/server.js & SVPID=$!` e uccidere per PID.
+- ⚠️ **Non usare `pkill`/`pgrep -f "backend/src/server.js"`**: il pattern matcha la riga di comando della shell stessa → auto-SIGTERM (exit 144, nessun output). Avviare il server con `node backend/src/server.js & SVPID=$!` e uccidere per PID. **Vale anche per `ps | grep | kill`**: se la shell sta eseguendo il comando che cerchi (es. `cap sync ios`), il grep trova se stessa. Filtrare con `awk '/pattern/ && !/zsh/ && !/awk/ {print $1}'`.
 - **Node ≥ 22 obbligatorio**: `@supabase/supabase-js` usa la WebSocket nativa, assente in Node 20 → il backend va in crash-loop all'avvio. Vite 8 richiede `@vitejs/plugin-vue` v6+.
+- ⚠️ **`npm install <pacchetto>` pota il binario nativo di Rolldown.** Vite 8 usa Rolldown, il cui binding per la piattaforma (`@rolldown/binding-darwin-arm64`) è una `optionalDependency`: installando un singolo pacchetto npm la rimuove da `node_modules` pur lasciandola nel `package-lock.json` (bug npm noto). Sintomo: `vite build` **resta appeso per sempre senza stampare nulla** — non dà errore, e tutti i thread sono in `uv_cond_wait`. Cura: `npm install` (senza argomenti) dalla root. Verifica: `ls node_modules/@rolldown/binding-darwin-arm64`.
+- **`vite build` e `npx cap sync ios` non terminano** dopo aver completato il lavoro: producono l'output corretto e poi restano vivi. Non aspettarli — verificare l'artefatto (`frontend/dist/index.html`, `frontend/ios/App/App/public/index.html`) e chiudere per PID. Corollario: **non usare `| tail`** su questi comandi, perché la pipe bufferizza e non si vede alcun avanzamento; redirigere su un file di log e leggerlo.
+
+### App iOS (Capacitor)
+
+Il progetto Xcode sta in `frontend/ios/App` (workspace `App.xcworkspace`, schema `App`,
+bundle id `local.gym.app`). L'app **incorpora** la SPA: ogni modifica al frontend richiede
+di ricostruire il bundle e risincronizzarlo.
+
+```bash
+npm run build                     # produce frontend/dist (usa .env.production)
+npx cap sync ios                  # copia dist in ios/App/App/public + aggiorna i pod
+xcrun devicectl list devices      # UDID dei device collegati
+
+# Device fisico
+xcodebuild -workspace frontend/ios/App/App.xcworkspace -scheme App \
+  -configuration Debug -destination 'id=<UDID>' -allowProvisioningUpdates build
+xcrun devicectl device install app --device <UDID> <path>/Debug-iphoneos/App.app
+xcrun devicectl device process launch --device <UDID> --console local.gym.app
+```
+
+- **`--console` è l'unico modo per leggere i `console.log` JS dal device**: appaiono come
+  `⚡️ [info] - …`. `log stream --device-name` **non esiste più** nelle versioni recenti di
+  macOS, e in zsh `log` è un builtin che maschera `/usr/bin/log`.
+- **Se l'iPhone è bloccato il lancio viene rifiutato** (`FBSOpenApplicationErrorDomain
+  error 7`, "device was not, or could not be, unlocked"): l'installazione riesce comunque,
+  serve solo sbloccarlo e rilanciare.
+- **Provisioning free (7 giorni).** Il profilo è `iOS Team Provisioning Profile` generato
+  da Xcode; scaduto quello l'app va reinstallata. Gli entitlements HealthKit
+  (`healthkit`, `healthkit.access: health-records`, `background-delivery`) sono già nel
+  profilo, quindi la firma non richiede nulla di manuale.
+- Per il simulatore vale lo stesso ciclo con
+  `-destination 'platform=iOS Simulator,name=iPhone 16 Pro'` e `xcrun simctl`. Ricordare
+  che nel simulatore l'app punta a Supabase e backend **locali**: servono `npm run db:start`
+  e `npm run dev:be` attivi, altrimenti login e dati falliscono per rete.
+- L'app sul device chiama l'EC2 dall'origine `capacitor://localhost`: se
+  `CORS_ORIGIN` sul server non la include, il login funziona ma **le dashboard restano
+  vuote** (vedi `DEPLOY.md`). Verificabile dal Mac senza toccare il telefono:
+  `curl -sD - -o /dev/null https://<host>/api/health -H 'Origin: capacitor://localhost' | grep -i access-control-allow-origin`
+  — se l'header manca, l'origine non è ammessa.
 
 ## Architettura
 
