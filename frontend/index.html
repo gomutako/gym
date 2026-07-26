@@ -2,10 +2,16 @@
 <html lang="it">
   <head>
     <meta charset="UTF-8" />
-    <!-- viewport-fit=cover: gestisce le safe-area sui device con notch -->
+    <!-- viewport-fit=cover: gestisce le safe-area sui device con notch.
+         maximum-scale/user-scalable: iOS zooma sul campo al focus quando il font è
+         sotto i 16px, e la maggior parte dei campi usa text-sm (14px). Bloccare la
+         scala evita il salto senza ingrandire i form ovunque. Nota: Safari mobile
+         ignora user-scalable dal 2016 (accessibilità) e lì lo zoom resta; la
+         WKWebView dell'app — dove il problema si vedeva — lo rispetta. È anche il
+         default del template Capacitor. -->
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
     />
     <meta name="theme-color" content="#4f46e5" />
     <!-- Supporto "Aggiungi a Home" su iOS -->

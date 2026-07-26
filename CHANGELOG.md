@@ -6,6 +6,12 @@ versionamento [SemVer](https://semver.org/lang/it/).
 
 ## [Non rilasciato]
 
+### Corretto
+- iOS zoomava sul campo a ogni focus: la maggior parte dei form usa `text-sm` (14px) e
+  sotto i 16px la WKWebView ingrandisce da sé. Bloccata la scala nel meta viewport
+  (`maximum-scale=1, user-scalable=no`), come nel template Capacitor. Nota: Safari mobile
+  ignora `user-scalable` dal 2016, quindi sul sito web lo zoom sui campi resta.
+
 ## [1.3.0] — 2026-07-26
 
 App iOS nativa e biometrici dell'allenamento letti da Apple Watch via HealthKit.
