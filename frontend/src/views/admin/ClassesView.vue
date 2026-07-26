@@ -128,8 +128,9 @@ onMounted(load);
   <div class="space-y-5">
     <p v-if="error && !formOpen" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{{ error }}</p>
 
-    <!-- Toolbar -->
-    <div class="flex justify-end">
+    <!-- Toolbar: titolo e azione sulla stessa riga, come in Modelli -->
+    <div class="flex items-center justify-between">
+      <h1 class="text-lg font-bold text-gray-900">Corsi</h1>
       <button
         class="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white active:scale-95"
         @click="openCreate"

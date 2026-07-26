@@ -22,6 +22,15 @@ const badgeClass = {
   scheduled: 'bg-amber-100 text-amber-700',
 };
 
+// Chip del ruolo. Tinte scelte fuori dalla scala verde/rosso/ambra usata dagli
+// abbonamenti: nella stessa riga convivono due chip, e riusare quei colori
+// farebbe leggere il ruolo come uno stato.
+const roleBadgeClass = {
+  admin: 'bg-brand/10 text-brand',
+  trainer: 'bg-indigo-50 text-indigo-600',
+  member: 'bg-gray-100 text-gray-600',
+};
+
 function isActive(u) {
   const end = u.subscription_end_date;
   return end && end >= new Date().toISOString().slice(0, 10);
@@ -66,14 +75,39 @@ function sortIcon(key) {
   return sortDir.value === 'asc' ? '↑' : '↓';
 }
 
+// --- Filtri ruolo e abbonamento ---
+const roleFilter = ref('');
+const subFilter = ref('');
+
+// Niente voce "Tutti" nelle opzioni: come negli altri filtri del progetto è il
+// placeholder a dirlo, e si azzera con la ✕ del Combobox (clearable).
+const roleFilterOptions = roleOptions;
+const subFilterOptions = [
+  { value: 'active', label: 'Attivo' },
+  { value: 'expired', label: 'Scaduto' },
+  { value: 'none', label: 'Senza abbonamento' },
+];
+
+// Stato dell'abbonamento a livello di UTENTE: la lista espone solo la data di
+// fine di quello più recente, mentre subStatus() ragiona sul singolo
+// abbonamento. Chi non ne ha mai avuto uno è 'none', così non finisce né tra
+// gli attivi né tra gli scaduti — dove sarebbe fuorviante.
+function userSubState(u) {
+  const end = u.subscription_end_date;
+  if (!end) return 'none';
+  return end >= new Date().toISOString().slice(0, 10) ? 'active' : 'expired';
+}
+
 const filtered = computed(() => {
   const q = search.value.trim().toLowerCase();
-  if (!q) return users.value;
-  return users.value.filter((u) =>
-    [u.full_name, u.email, roleLabel[u.role]]
+  return users.value.filter((u) => {
+    if (roleFilter.value && u.role !== roleFilter.value) return false;
+    if (subFilter.value && userSubState(u) !== subFilter.value) return false;
+    if (!q) return true;
+    return [u.full_name, u.email, roleLabel[u.role]]
       .filter(Boolean)
-      .some((v) => v.toLowerCase().includes(q))
-  );
+      .some((v) => v.toLowerCase().includes(q));
+  });
 });
 
 function sortValue(u, key) {
@@ -100,7 +134,7 @@ const paged = computed(() => sorted.value.slice((page.value - 1) * PAGE_SIZE, pa
 const rangeFrom = computed(() => (sorted.value.length ? (page.value - 1) * PAGE_SIZE + 1 : 0));
 const rangeTo = computed(() => Math.min(page.value * PAGE_SIZE, sorted.value.length));
 
-watch([search, sortKey, sortDir], () => { page.value = 1; });
+watch([search, roleFilter, subFilter, sortKey, sortDir], () => { page.value = 1; });
 watch(pageCount, (n) => { if (page.value > n) page.value = n; });
 
 // --- Modifica utente (pannello) ---
@@ -180,12 +214,32 @@ onMounted(load);
 
 <template>
   <div class="space-y-4">
+    <h1 class="text-lg font-bold text-gray-900">Utenti</h1>
     <p v-if="error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{{ error }}</p>
 
     <input
       v-model="search" type="search" placeholder="Cerca nome, email, ruolo…"
       class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-brand focus:outline-none"
     />
+
+    <!-- Filtri -->
+    <div class="grid grid-cols-2 gap-2">
+      <Combobox v-model="roleFilter" :options="roleFilterOptions" dense placeholder="Tutti i ruoli" empty-text="Nessun ruolo" />
+      <Combobox v-model="subFilter" :options="subFilterOptions" dense placeholder="Tutti gli abbonamenti" empty-text="Nessuno stato" />
+    </div>
+
+    <p v-if="!loading && (roleFilter || subFilter || search)" class="text-xs text-gray-400">
+      {{ sorted.length }}
+      {{ sorted.length === 1 ? 'utente trovato' : 'utenti trovati' }}
+      <button
+        v-if="roleFilter || subFilter || search"
+        type="button"
+        class="ml-1 font-semibold text-brand active:scale-95"
+        @click="search = ''; roleFilter = ''; subFilter = ''"
+      >
+        Azzera filtri
+      </button>
+    </p>
 
     <p v-if="loading" class="text-sm text-gray-400">Caricamento utenti…</p>
     <p v-else-if="!sorted.length" class="rounded-xl bg-white p-4 text-sm text-gray-400 shadow-sm">
@@ -221,7 +275,14 @@ onMounted(load);
                 <p class="truncate font-medium text-gray-900">{{ u.full_name || 'Senza nome' }}</p>
                 <p class="truncate text-xs text-gray-400">{{ u.email }}</p>
               </td>
-              <td class="px-2 py-2 text-xs text-gray-600">{{ roleLabel[u.role] }}</td>
+              <td class="px-2 py-2">
+                <span
+                  class="inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold"
+                  :class="roleBadgeClass[u.role] || 'bg-gray-100 text-gray-600'"
+                >
+                  {{ roleLabel[u.role] }}
+                </span>
+              </td>
               <td class="px-2 py-2">
                 <span
                   v-if="u.role === 'member'"
