@@ -42,7 +42,6 @@ async function pushTabs() {
   }));
   await tabbar.configure(tabs, currentTab.value, {
     tint: theme.isDark ? tabBarTint.dark : tabBarTint.light,
-    dark: theme.isDark,
   });
 }
 
@@ -63,7 +62,9 @@ onUnmounted(() => {
 
 // Il ruolo si conosce solo dopo il caricamento del profilo, e il tema può cambiare
 // in qualsiasi momento: in entrambi i casi le tab vanno rimandate, altrimenti
-// restano quelle del ruolo sbagliato o tinte per il tema sbagliato.
+// restano quelle del ruolo sbagliato o tinte per il tema sbagliato. (Chiaro/scuro
+// della barra lo gestisce stores/theme.js: qui serve solo la tinta, che non si
+// eredita.)
 watch(() => [auth.role, theme.isDark], pushTabs);
 
 // Navigazione dall'interno della pagina (link, redirect delle guardie): la

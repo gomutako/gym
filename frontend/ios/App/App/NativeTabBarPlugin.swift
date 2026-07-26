@@ -53,7 +53,6 @@ public class NativeTabBarPlugin: CAPPlugin, UITabBarDelegate {
         let tabs = call.getArray("tabs", JSObject.self) ?? []
         let selected = call.getString("selected")
         let tint = call.getString("tint")
-        let dark = call.getBool("dark") ?? false
 
         DispatchQueue.main.async {
             guard let host = self.host else {
@@ -97,10 +96,8 @@ public class NativeTabBarPlugin: CAPPlugin, UITabBarDelegate {
             bar.setItems(items, animated: false)
             self.names = newNames
 
-            // Il tema dell'app è una scelta dell'utente (chiaro | scuro | automatico),
-            // non necessariamente quella di sistema: senza override, chi forza il
-            // chiaro con iOS in scuro vedrebbe una barra scura sotto un'app chiara.
-            bar.overrideUserInterfaceStyle = dark ? .dark : .light
+            // Chiaro o scuro lo decide `setAppearance`, sul view controller: la
+            // barra è una sua subview e lo eredita.
             if let tint, let color = UIColor(hex: tint) {
                 bar.tintColor = color
             }
@@ -118,6 +115,23 @@ public class NativeTabBarPlugin: CAPPlugin, UITabBarDelegate {
         let name = call.getString("name")
         DispatchQueue.main.async {
             self.select(name)
+            call.resolve()
+        }
+    }
+
+    /// Porta al lato nativo il tema scelto nell'app: fondo pagina e stile chiaro o
+    /// scuro. Vive qui, e non in un plugin a sé, perché questo è l'unico ponte che
+    /// l'app ha verso il chrome nativo — se quel chrome crescerà oltre la tab bar,
+    /// sarà il momento di dargli un plugin proprio.
+    @objc func setAppearance(_ call: CAPPluginCall) {
+        let dark = call.getBool("dark") ?? false
+        let background = call.getString("background")
+        DispatchQueue.main.async {
+            guard let vc = self.bridge?.viewController as? ViewController else {
+                call.reject("view non disponibile")
+                return
+            }
+            vc.applyAppearance(dark: dark, background: background.flatMap { UIColor(hex: $0) })
             call.resolve()
         }
     }

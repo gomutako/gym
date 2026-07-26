@@ -31,3 +31,15 @@ export const tabBarTint = {
   light: brand[600],
   dark: brand[300],
 };
+
+/**
+ * Fondo pagina, gemello di `body` e `html.dark body` in style.css.
+ *
+ * Serve al lato nativo: la WebView dipinge di questo colore la zona di rimbalzo
+ * dello scroll, che altrimenti resta del colore di sistema (nero con iOS in
+ * scuro, anche quando l'app è in tema chiaro).
+ */
+export const surface = {
+  light: '#F9FAFB', // gray-50
+  dark: '#0F1115',
+};

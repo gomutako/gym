@@ -8,6 +8,8 @@
 // =====================================================
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
+import { surface } from '@/lib/palette';
+import { setAppearance } from '@/lib/native-tabbar';
 
 const STORAGE_KEY = 'theme';
 const media = window.matchMedia('(prefers-color-scheme: dark)');
@@ -28,6 +30,15 @@ export const useThemeStore = defineStore('theme', () => {
     root.classList.toggle('dark', isDark.value);
     // Fa adattare anche i controlli nativi (select, checkbox, scrollbar…)
     root.style.colorScheme = isDark.value ? 'dark' : 'light';
+    // Nell'app iOS il tema riguarda anche ciò che sta FUORI dalla WebView: il
+    // fondo predefinito è quello di sistema, quindi con iOS in scuro la zona di
+    // rimbalzo dello scroll resterebbe nera anche in tema chiaro. Sta qui perché
+    // apply() è l'unico punto da cui passano avvio, scelta manuale e cambio di
+    // sistema. Sul web è un no-op.
+    setAppearance({
+      dark: isDark.value,
+      background: isDark.value ? surface.dark : surface.light,
+    }).catch((err) => console.error('[tema] aspetto nativo non applicato:', err));
   }
 
   function setMode(next) {

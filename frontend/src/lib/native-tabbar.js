@@ -38,8 +38,8 @@ function watchHeight() {
  * Crea o aggiorna le voci della barra e la mostra.
  * @param {{name: string, title: string, symbol: string}[]} tabs
  * @param {string} [selected] nome della rotta da evidenziare
- * @param {{tint?: string, dark?: boolean}} [theme] tinta della tab attiva (hex
- *   `#RRGGBB`, dalla palette) e tema corrente dell'app
+ * @param {{tint?: string}} [theme] tinta della tab attiva (hex `#RRGGBB`, dalla
+ *   palette); chiaro o scuro lo porta `setAppearance`
  */
 export async function configure(tabs, selected, theme = {}) {
   if (!isSupported()) return;
@@ -48,8 +48,21 @@ export async function configure(tabs, selected, theme = {}) {
     tabs,
     selected,
     tint: theme.tint,
-    dark: !!theme.dark,
   }));
+}
+
+/**
+ * Porta al nativo il tema scelto nell'app: fondo pagina e stile chiaro/scuro.
+ *
+ * Va chiamata all'avvio, prima del mount, non solo al cambio tema: il fondo
+ * predefinito della WebView è quello di sistema, quindi senza questa chiamata la
+ * schermata di login rimbalza sul nero con iOS in tema scuro.
+ *
+ * @param {{dark: boolean, background: string}} appearance
+ */
+export async function setAppearance({ dark, background }) {
+  if (!isSupported()) return;
+  await NativeTabBar.setAppearance({ dark: !!dark, background });
 }
 
 export async function setSelected(name) {

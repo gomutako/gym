@@ -68,4 +68,23 @@ class ViewController: CAPBridgeViewController {
             webView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
         ])
     }
+
+    /// Allinea il lato nativo al tema scelto **nell'app**, che non è
+    /// necessariamente quello di sistema (`stores/theme.js`: chiaro | scuro |
+    /// automatico).
+    ///
+    /// Serve perché Capacitor imposta il fondo della WebView e della sua scroll
+    /// view a `UIColor.systemBackground`, che è dinamico: con iOS in scuro resta
+    /// nero anche quando l'app è chiara, e si vede — è quel nero che compare nella
+    /// zona di rimbalzo, quando lo scroll cinetico va oltre il contenuto. Qui ci va
+    /// il fondo pagina vero (gemello di `body` in style.css), e
+    /// `overrideUserInterfaceStyle` fa seguire l'app a tutto il resto: la tab bar,
+    /// essendo una subview, lo eredita senza doverglielo dire.
+    func applyAppearance(dark: Bool, background: UIColor?) {
+        overrideUserInterfaceStyle = dark ? .dark : .light
+        guard let background else { return }
+        view.backgroundColor = background
+        webView?.backgroundColor = background
+        webView?.scrollView.backgroundColor = background
+    }
 }
