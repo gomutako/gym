@@ -3,8 +3,7 @@
 // Allega automaticamente il JWT Supabase dell'utente loggato.
 // =====================================================
 import { supabase } from './supabase';
-
-const BASE = import.meta.env.VITE_API_BASE_URL;
+import { getRuntimeConfig } from './runtime-config';
 
 async function authHeader() {
   const { data } = await supabase.auth.getSession();
@@ -21,7 +20,7 @@ async function apiFetch(path, options = {}) {
     ...(options.headers || {}),
   };
 
-  const res = await fetch(BASE + path, { ...options, headers });
+  const res = await fetch(getRuntimeConfig().apiBaseUrl + path, { ...options, headers });
 
   if (!res.ok) {
     // Prova a estrarre il messaggio d'errore JSON dal backend

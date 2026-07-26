@@ -86,6 +86,10 @@ PORT=3000
 VITE_SUPABASE_URL=http://127.0.0.1:54321
 VITE_SUPABASE_ANON_KEY=<anon key da db:status>
 VITE_API_BASE_URL=http://localhost:3000
+# Terna usata solo dal simulatore iOS: in dev è identica a quella sopra
+VITE_SUPABASE_URL_SIM=http://127.0.0.1:54321
+VITE_SUPABASE_ANON_KEY_SIM=<anon key da db:status>
+VITE_API_BASE_URL_SIM=http://localhost:3000
 ```
 
 > Le chiavi locali sono generate dalla CLI e **valgono solo su quella macchina**:

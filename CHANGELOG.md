@@ -6,6 +6,38 @@ versionamento [SemVer](https://semver.org/lang/it/).
 
 ## [Non rilasciato]
 
+## [1.3.0] — 2026-07-26
+
+App iOS nativa e biometrici dell'allenamento letti da Apple Watch via HealthKit.
+
+### Aggiunto
+- **App iOS (Capacitor)** che incorpora la SPA come bundle statico (`frontend/ios/App`,
+  bundle id `local.gym.app`). Il web resta invariato: tutto il codice HealthKit ha un
+  no-op sulle piattaforme non native.
+- **Plugin Swift `HealthKitLive`**: stream di frequenza cardiaca ed energia attiva con
+  `HKAnchoredObjectQuery`, più `summary()` per media/massimo HR e kcal totali sulla
+  finestra della sessione.
+- **Badge live HR/kcal** nella schermata di allenamento, con **snapshot salvato** a fine
+  sessione nella nuova colonna `workout_sessions.biometrics_json`
+  (`{ hr_avg, hr_max, active_kcal }`), così i valori restano visibili nello storico.
+- **Switch d'ambiente a runtime**: l'app è un bundle statico e contiene due terne di
+  variabili, scelte all'avvio via `@capacitor/device` → simulatore su Supabase e backend
+  locali, device fisico e web sul cloud.
+
+### Corretto
+- Il plugin `HealthKitLive` non era registrato nel bridge Capacitor: le chiamate dal JS
+  non raggiungevano il codice nativo
+- Il badge "in attesa di dati dal Watch" non diventava reattivo allo scorrere del tempo
+- Parsing delle date ISO con 6 decimali (come le serializza PostgREST), scoping della
+  query alla finestra di sessione, isolamento degli errori e una race condition emersi
+  dalla review
+
+### Note
+- L'anchor dello stream è l'inizio della sessione, non l'istante di apertura della
+  schermata: **watchOS sincronizza i campioni sull'iPhone a blocchi con qualche minuto di
+  ritardo**, quindi i primi minuti di allenamento non mostrano badge live, ma i dati
+  vengono poi recuperati retroattivamente senza perdite.
+
 ## [1.0.1] — 2026-07-24
 
 Prima messa in produzione (EC2 + Supabase Cloud) e correzioni emerse dal deploy reale.

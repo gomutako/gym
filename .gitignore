@@ -24,6 +24,14 @@ terraform.tfvars
 
 # Supabase CLI (cache locale, non versionare)
 supabase/.temp/
+# HOME e CLI isolate usate dallo script frontend/ios/App/supabase-local.
+# .supabase-home è dove la CLI scrive i token di `supabase login`: mai versionarla.
+frontend/ios/App/.supabase-home/
+frontend/ios/App/.supabase-cli-local/
+frontend/ios/App/.npm-cache/
+
+# Snapshot e log del browser MCP (artefatti di debug usa-e-getta)
+.playwright-mcp/
 
 # Editor / OS
 .DS_Store

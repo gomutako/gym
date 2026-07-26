@@ -172,6 +172,15 @@ export default async function sessionsRoutes(fastify) {
           properties: {
             exercises_log: { type: 'array' },
             completed_at: { type: ['string', 'null'] },
+            biometrics_json: {
+              type: ['object', 'null'],
+              properties: {
+                hr_avg: { type: ['integer', 'null'] },
+                hr_max: { type: ['integer', 'null'] },
+                active_kcal: { type: ['number', 'null'] },
+              },
+              additionalProperties: false,
+            },
           },
         },
       },
@@ -187,6 +196,7 @@ export default async function sessionsRoutes(fastify) {
       const patch = {};
       if (request.body.exercises_log !== undefined) patch.exercises_log = request.body.exercises_log;
       if (request.body.completed_at !== undefined) patch.completed_at = request.body.completed_at;
+      if (request.body.biometrics_json !== undefined) patch.biometrics_json = request.body.biometrics_json;
 
       const { data, error } = await supabaseAdmin
         .from('workout_sessions')

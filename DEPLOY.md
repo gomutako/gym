@@ -157,8 +157,20 @@ systemctl status gym-backend      # deve essere "active (running)"
 # Frontend (build di produzione)
 cp frontend/.env.production.example frontend/.env.production
 #   VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY / VITE_API_BASE_URL
+#   (le VITE_*_SIM servono solo alla build iOS per il simulatore: sull'EC2
+#    sono innocue, il web usa sempre la terna senza suffisso)
 npm run build --workspace frontend    # genera frontend/dist (con PWA)
 ```
+
+> **App iOS (Capacitor) e CORS.** L'app iOS incorpora la SPA in una WKWebView con
+> `iosScheme: 'capacitor'` (vedi `capacitor.config.ts`), quindi la sua origine non è
+> `https://app.tuodominio.com` ma **`capacitor://localhost`** — un'origine non-http(s)
+> distinta da quella dell'app web. Il login funziona comunque (va diretto a Supabase,
+> non passa dal CORS del backend), ma **ogni chiamata `/api/*`** dall'app iOS verrebbe
+> bloccata dal CORS se `capacitor://localhost` non è in `CORS_ORIGIN`. Aggiungilo come
+> origine aggiuntiva separata da virgola, es.
+> `CORS_ORIGIN=https://app.tuodominio.com,capacitor://localhost`
+> (già impostato di default in `backend/.env.production.example`).
 
 ## 4. Caddy (HTTPS automatico)
 
