@@ -5,7 +5,10 @@
 import { supabase } from './supabase';
 import { getRuntimeConfig } from './runtime-config';
 
-async function authHeader() {
+// Esportata perché anche lib/diagnostics.js deve autenticare le proprie
+// chiamate, ma senza passare da apiFetch: gli serve lo status code della
+// risposta, che apiFetch perde sollevando un'eccezione.
+export async function authHeader() {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
   return token ? { Authorization: `Bearer ${token}` } : {};
