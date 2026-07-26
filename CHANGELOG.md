@@ -83,6 +83,54 @@ App iOS nativa e biometrici dell'allenamento letti da Apple Watch via HealthKit.
   ritardo**, quindi i primi minuti di allenamento non mostrano badge live, ma i dati
   vengono poi recuperati retroattivamente senza perdite.
 
+## [1.2.0] — 2026-07-25
+
+Catalogo esercizi completo, libreria di modelli di scheda e sezione clienti per i trainer.
+
+### Aggiunto
+- **Catalogo esercizi completo**: il seed importa l'intero free-exercise-db (~873 voci)
+  con metadati tradotti in italiano, tutte le immagini in carousel, istruzioni passo-passo
+  e video curati. Nuovi campi `equipment`, `category`, `force`, `level`, `mechanic`,
+  `secondary_muscles`, `instructions`, `image_paths`.
+- **Modelli di scheda** (`workout_templates`): libreria di programmi pronti, non legati a
+  un cliente, assegnabili con `POST /api/templates/:id/assign` che ne crea una copia.
+  Seed di ~8 programmi noti (PPL, Full Body, 5x5, Arnold split…).
+- **Sezione Clienti** per i trainer, con anagrafica e schede per singolo cliente.
+- Profilo con **dati fisici**: genere, data di nascita, altezza, peso, BMI derivato e note.
+- Filtri a combobox negli esercizi (gruppo, attrezzatura, livello, meccanica) e componenti
+  condivisi `Modal`, `Combobox`, `WorkoutDaysEditor`, `WorkoutDays`, `IdentityCard`.
+- Schede: campi obiettivo e livello, "salva come modello" e "nuova da modello".
+
+### Modificato
+- Redesign della schermata di login (logo, gradiente, card).
+
+## [1.1.0] — 2026-07-25
+
+Profilo self-service, abbonamenti come storico di periodi, tema scuro e statistiche.
+
+### Aggiunto
+- **Profilo self-service**: `GET`/`PATCH /api/profile` per nome, cognome, telefono e
+  avatar, senza poter toccare ruolo o abbonamento. Nome e cognome separati, con
+  `full_name` come colonna generata.
+- **Abbonamenti** come storico di periodi (tabella `subscriptions`), con un trigger che
+  mantiene `profiles.subscription_end_date` allineata al periodo più lontano.
+- **Tema chiaro / scuro / automatico**, applicato prima del render per evitare il flash.
+- **Statistiche di attività** nella dashboard member: allenamenti a settimana, volume e
+  gruppi muscolari (`ActivityStats`).
+- **Recupero password** con link dal login e vista `/reset-password`.
+- Stato delle schede: "in uso" (esclusiva) e "archiviata", con vincolo a livello di
+  database che impedisce a una scheda in uso di essere archiviata.
+- Pendenza (%) per serie sugli esercizi da tapis roulant; modifica del catalogo esercizi
+  via `PATCH /api/exercises/:id`; l'admin può modificare l'email di un utente.
+- Immagini reali e video per ogni esercizio nel seed.
+- Template email in italiano (recupero, conferma, cambio email) e SMTP di produzione
+  documentato — nessun mailserver sull'EC2.
+- `HANDOVER.md` per riprendere lo sviluppo su un'altra macchina.
+
+### Modificato
+- Viste utenti, schede e storico convertite in tabelle ordinabili e paginate; le `select`
+  sostituite dal componente `Combobox`; rimossa la barra del titolo superiore.
+
 ## [1.0.1] — 2026-07-24
 
 Prima messa in produzione (EC2 + Supabase Cloud) e correzioni emerse dal deploy reale.
