@@ -52,6 +52,8 @@ public class NativeTabBarPlugin: CAPPlugin, UITabBarDelegate {
     @objc func configure(_ call: CAPPluginCall) {
         let tabs = call.getArray("tabs", JSObject.self) ?? []
         let selected = call.getString("selected")
+        let tint = call.getString("tint")
+        let dark = call.getBool("dark") ?? false
 
         DispatchQueue.main.async {
             guard let host = self.host else {
@@ -94,6 +96,14 @@ public class NativeTabBarPlugin: CAPPlugin, UITabBarDelegate {
             }
             bar.setItems(items, animated: false)
             self.names = newNames
+
+            // Il tema dell'app è una scelta dell'utente (chiaro | scuro | automatico),
+            // non necessariamente quella di sistema: senza override, chi forza il
+            // chiaro con iOS in scuro vedrebbe una barra scura sotto un'app chiara.
+            bar.overrideUserInterfaceStyle = dark ? .dark : .light
+            if let tint, let color = UIColor(hex: tint) {
+                bar.tintColor = color
+            }
 
             bar.isHidden = false
             self.select(selected)
@@ -157,5 +167,22 @@ public class NativeTabBarPlugin: CAPPlugin, UITabBarDelegate {
               let items = bar.items,
               idx < items.count else { return }
         bar.selectedItem = items[idx]
+    }
+}
+
+/// Parsing di `#RRGGBB`: la palette vive nel JS (`lib/palette.js`), che è anche la
+/// sorgente di Tailwind — riscrivere gli hex qui significherebbe averne due copie,
+/// e quella dimenticata sarebbe questa, che non si vede finché non apri l'app.
+private extension UIColor {
+    convenience init?(hex: String) {
+        var s = hex.trimmingCharacters(in: .whitespacesAndNewlines)
+        if s.hasPrefix("#") { s.removeFirst() }
+        guard s.count == 6, let v = UInt32(s, radix: 16) else { return nil }
+        self.init(
+            red: CGFloat((v >> 16) & 0xFF) / 255,
+            green: CGFloat((v >> 8) & 0xFF) / 255,
+            blue: CGFloat(v & 0xFF) / 255,
+            alpha: 1
+        )
     }
 }

@@ -38,11 +38,18 @@ function watchHeight() {
  * Crea o aggiorna le voci della barra e la mostra.
  * @param {{name: string, title: string, symbol: string}[]} tabs
  * @param {string} [selected] nome della rotta da evidenziare
+ * @param {{tint?: string, dark?: boolean}} [theme] tinta della tab attiva (hex
+ *   `#RRGGBB`, dalla palette) e tema corrente dell'app
  */
-export async function configure(tabs, selected) {
+export async function configure(tabs, selected, theme = {}) {
   if (!isSupported()) return;
   watchHeight();
-  publishHeight(await NativeTabBar.configure({ tabs, selected }));
+  publishHeight(await NativeTabBar.configure({
+    tabs,
+    selected,
+    tint: theme.tint,
+    dark: !!theme.dark,
+  }));
 }
 
 export async function setSelected(name) {

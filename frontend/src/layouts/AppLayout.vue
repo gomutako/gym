@@ -12,13 +12,16 @@
 import { computed, watch, onMounted, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
+import { useThemeStore } from '@/stores/theme';
 import { tabsForRole } from '@/lib/nav-tabs';
+import { tabBarTint } from '@/lib/palette';
 import * as tabbar from '@/lib/native-tabbar';
 import BottomNav from '@/components/BottomNav.vue';
 
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
+const theme = useThemeStore();
 
 const native = tabbar.isSupported();
 let unsubscribe = null;
@@ -37,7 +40,10 @@ async function pushTabs() {
     title: t.label,
     symbol: t.symbol,
   }));
-  await tabbar.configure(tabs, currentTab.value);
+  await tabbar.configure(tabs, currentTab.value, {
+    tint: theme.isDark ? tabBarTint.dark : tabBarTint.light,
+    dark: theme.isDark,
+  });
 }
 
 onMounted(async () => {
@@ -55,9 +61,10 @@ onUnmounted(() => {
   if (native) tabbar.hide();
 });
 
-// Il ruolo si conosce solo dopo il caricamento del profilo: le tab vanno
-// rimandate quando cambia, altrimenti restano quelle del ruolo sbagliato.
-watch(() => auth.role, pushTabs);
+// Il ruolo si conosce solo dopo il caricamento del profilo, e il tema può cambiare
+// in qualsiasi momento: in entrambi i casi le tab vanno rimandate, altrimenti
+// restano quelle del ruolo sbagliato o tinte per il tema sbagliato.
+watch(() => [auth.role, theme.isDark], pushTabs);
 
 // Navigazione dall'interno della pagina (link, redirect delle guardie): la
 // selezione della barra va riallineata, altrimenti indica una sezione diversa
