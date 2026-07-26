@@ -34,6 +34,18 @@ npm run db:push        # applica le migration al progetto Supabase CLOUD (produz
 Non esistono test unitari configurati: la verifica si fa con **script e2e usa-e-getta** che accedono a Supabase locale via `@supabase/supabase-js` (login utenti seed → chiamate REST al backend). Pattern usato: creare un file `.mjs` temporaneo, avviare il backend, eseguirlo, poi rimuoverlo.
 
 ### Ambiente / gotcha
+- 🚨 **Il progetto NON deve stare in una cartella sincronizzata con iCloud** (`~/Desktop`
+  e `~/Documenti` lo sono se è attivo "Cartelle Desktop e Documenti"). Tenerlo lì corrompe
+  `node_modules` e `.git`: iCloud prova a sincronizzare decine di migliaia di file, ne
+  riscrive i permessi a `600`, ritarda la materializzazione e lascia file *dataless*.
+  I sintomi sono vari e fuorvianti — `vite build` appeso **a 0% di CPU** (attesa di I/O,
+  non deadlock), `ERR_INVALID_PACKAGE_CONFIG` su `package.json` validi, `ENOENT` su file
+  esistenti, moduli che non esportano ciò che dovrebbero, `cp` che fallisce con
+  `Operation timed out` producendo file da 0 byte, e `git push` rifiutato con
+  `index-pack failed` / `early EOF` perché gli oggetti non si leggono per intero.
+  Diagnosi: `brctl status` (cerca `Needs Apply Changes` sul path del progetto) e
+  `find . -type f -perm 600 -not -path "*/node_modules/*"`. Cura: spostare il progetto
+  fuori (es. `~/Developer`); `brctl download <path>` materializza un file bloccato.
 - **Docker** serve solo per Supabase; il codice si scrive/builda senza. La CLI Supabase (`supabase`) è una devDependency della root → invocarla con `npx supabase` o via script `db:*`.
 - La shell dell'agente **non è nel gruppo `docker`** di default: prefissare i comandi Supabase con `sg docker -c "..."`.
 - ⚠️ **Non usare `pkill`/`pgrep -f "backend/src/server.js"`**: il pattern matcha la riga di comando della shell stessa → auto-SIGTERM (exit 144, nessun output). Avviare il server con `node backend/src/server.js & SVPID=$!` e uccidere per PID. **Vale anche per `ps | grep | kill`**: se la shell sta eseguendo il comando che cerchi (es. `cap sync ios`), il grep trova se stessa. Filtrare con `awk '/pattern/ && !/zsh/ && !/awk/ {print $1}'`.
