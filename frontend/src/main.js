@@ -1,6 +1,7 @@
 // =====================================================
 // Entry point dell'app Vue.
-// Inizializza Pinia, ripristina la sessione Supabase, poi monta.
+// Risolve la configurazione d'ambiente, crea il client Supabase,
+// ripristina la sessione, poi monta.
 // =====================================================
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';
@@ -8,6 +9,8 @@ import App from './App.vue';
 import router from './router';
 import { useAuthStore } from './stores/auth';
 import { useThemeStore } from './stores/theme';
+import { initRuntimeConfig } from './lib/runtime-config';
+import { initSupabase } from './lib/supabase';
 import './style.css';
 
 const app = createApp(App);
@@ -16,10 +19,32 @@ app.use(createPinia());
 // Tema: applica la classe .dark (reagisce ai cambi di sistema in 'auto')
 useThemeStore().init();
 
-// Ripristina la sessione PRIMA di montare, così le guardie del router
+// Nel simulatore iOS la config punta a Supabase/backend locali, su device e web
+// a quelli di produzione: va risolta prima di creare il client.
+// Poi si ripristina la sessione PRIMA di montare, così le guardie del router
 // conoscono già lo stato di login al primo caricamento.
-const auth = useAuthStore();
-auth.init().finally(() => {
-  app.use(router);
-  app.mount('#app');
-});
+async function bootstrap() {
+  await initRuntimeConfig();
+  initSupabase();
+  // Una sessione non ripristinabile (es. rete assente) non deve impedire il
+  // mount: l'utente vede la schermata di login.
+  await useAuthStore()
+    .init()
+    .catch((err) => console.error('[avvio] ripristino sessione fallito:', err));
+}
+
+// Il secondo argomento di then() intercetta solo i fallimenti del bootstrap:
+// un errore nel mount resta un errore di mount, non di configurazione.
+bootstrap().then(
+  () => {
+    app.use(router);
+    app.mount('#app');
+  },
+  (err) => {
+    // Configurazione assente o incompleta: l'app non può funzionare. Su device
+    // non c'è una console a portata di mano, quindi il messaggio va a schermo.
+    console.error('[avvio] configurazione non valida:', err);
+    const root = document.querySelector('#app');
+    if (root) root.textContent = `Configurazione non valida: ${err.message}`;
+  }
+);

@@ -57,7 +57,8 @@ Supabase Auth. Un trigger DB (`handle_new_user`) crea automaticamente una riga `
 
 ### Frontend (`frontend/src/`)
 - Vue 3 `<script setup>`, Pinia, Vue Router, TailwindCSS mobile-first. Alias `@` → `src`.
-- `main.js` ripristina la sessione (`authStore.init()`) **prima** di montare, così le guardie del router conoscono lo stato di login.
+- `main.js` risolve la config d'ambiente (`initRuntimeConfig()`), crea il client Supabase (`initSupabase()`) e ripristina la sessione (`authStore.init()`) **prima** di montare, così le guardie del router conoscono lo stato di login.
+- `lib/runtime-config.js` — **la config è risolta a runtime, non a build-time**: l'app iOS è un bundle statico, quindi contiene due terne di variabili e all'avvio sceglie in base a `@capacitor/device` → `isVirtual`. Simulatore iOS → terna `VITE_*_SIM` (Supabase + backend locali); device e web → terna `VITE_*` (cloud). Conseguenza: `supabase` in `lib/supabase.js` è un `let` assegnato da `initSupabase()`, quindi **non usarlo a livello di modulo** — solo dentro funzioni (i live binding ES fanno il resto).
 - `stores/auth.js` — sessione, `role`, `isSubscriptionActive`, login/register/logout.
 - `router/index.js` — area protetta sotto `layouts/AppLayout.vue` (header + `components/BottomNav.vue`); guardie su `meta.requiresAuth` e `meta.roles`.
 - **Navigazione role-aware**: `views/HomeDispatcher.vue` sceglie la dashboard (member/trainer/admin) e `BottomNav` cambia le tab in base al ruolo. L'admin oggi non ha una dashboard member: le viste sono divise in `views/{member,trainer,admin}/`.

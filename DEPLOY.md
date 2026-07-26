@@ -157,6 +157,8 @@ systemctl status gym-backend      # deve essere "active (running)"
 # Frontend (build di produzione)
 cp frontend/.env.production.example frontend/.env.production
 #   VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY / VITE_API_BASE_URL
+#   (le VITE_*_SIM servono solo alla build iOS per il simulatore: sull'EC2
+#    sono innocue, il web usa sempre la terna senza suffisso)
 npm run build --workspace frontend    # genera frontend/dist (con PWA)
 ```
 
