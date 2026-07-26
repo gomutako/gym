@@ -6,7 +6,22 @@ versionamento [SemVer](https://semver.org/lang/it/).
 
 ## [Non rilasciato]
 
+### Aggiunto
+- La descrizione dell'esecuzione nella card dell'esercizio è **troncata** (un passo, o due
+  righe di testo discorsivo) con un **"Leggi tutto"** allineato a destra: durante
+  l'allenamento servono a colpo d'occhio le serie, non una decina di passi di istruzioni.
+  Il tasto compare solo quando c'è davvero altro da leggere, e cambiando esercizio la
+  descrizione torna corta da sola.
+
 ### Corretto
+- **Il contenuto finiva incollato alla tab bar**: `pb-24` (96px) copriva a malapena la
+  nav, che è alta ~61px **più** `env(safe-area-inset-bottom)` (34px sui device con home
+  indicator). Ora la safe-area entra nel calcolo del padding invece di essere assorbita.
+- **Lo scroll si fermava di colpo, senza rimbalzo di fine lista**: Capacitor forza
+  `scrollView.bounces = false` in `CAPBridgeViewController` e non espone un'opzione per
+  cambiarlo, quindi nessuna regola CSS poteva ripristinarlo. Sovrascritto in
+  `ViewController.viewDidLoad()`; rimosso anche `overscroll-behavior-y: none`, che
+  bloccava la stessa elasticità dal lato web.
 - iOS zoomava sul campo a ogni focus: la maggior parte dei form usa `text-sm` (14px) e
   sotto i 16px la WKWebView ingrandisce da sé. Bloccata la scala nel meta viewport
   (`maximum-scale=1, user-scalable=no`), come nel template Capacitor. Nota: Safari mobile
