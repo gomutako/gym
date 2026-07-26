@@ -58,10 +58,14 @@ input[type='date']::-webkit-date-and-time-value,
 input[type='datetime-local']::-webkit-date-and-time-value,
 input[type='time']::-webkit-date-and-time-value,
 input[type='month']::-webkit-date-and-time-value {
+  /* `display: block` è la riga che pareggia l'altezza: da inline-block lo
+     pseudo-elemento porta con sé lo spazio del baseline — i pochi pixel sotto la
+     riga che facevano il campo più alto dei vicini a prescindere dal valore. */
+  display: block;
   line-height: inherit;
   margin: 0;
   padding: 0;
-  min-height: 1.25em;
+  height: 1.25em; /* fallback per i motori senza l'unità lh (Safari < 16.4) */
   height: 1lh;
   text-align: left;
 }
