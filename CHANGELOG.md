@@ -13,6 +13,9 @@ versionamento [SemVer](https://semver.org/lang/it/).
   non possono divergere fra le due implementazioni.
 
 ### Corretto
+- **I campi data non sbordano più**: su iOS hanno una larghezza minima propria che `w-full`
+  non riusciva a ridurre, così invadevano il campo accanto (data di nascita, inizio e fine
+  di un abbonamento, data e ora di un corso) e risultavano anche più alti degli altri.
 - **Il fondo nativo dell'app iOS non è più nero**: quello predefinito era il colore di
   *sistema*, quindi con iOS in tema scuro restava nero anche con l'app in tema chiaro, e si
   notava nella zona di rimbalzo dello scroll. Ora è il fondo pagina vero e segue il tema
