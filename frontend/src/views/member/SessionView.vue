@@ -26,6 +26,7 @@ const hkSupported = healthkit.isSupported();
 const liveHR = ref(null);         // bpm corrente
 const liveKcal = ref(null);       // kcal attive accumulate (ultimo sample cumulativo)
 const lastSampleAt = ref(null);   // per rilevare "in attesa Watch"
+const hkError = ref('');          // perché i dati non arrivano (permesso, plugin, dispositivo)
 const now = ref(Date.now());      // tick periodico per rendere reattivo hrStale
 let hkUnsub = null;
 let hkTickInterval = null;
@@ -42,10 +43,26 @@ const current = computed(() => log.value[index.value] || null);
 
 const saved = computed(() => session.value?.biometrics_json || null);
 const badgeHR = computed(() => (hkSupported && !session.value?.completed_at) ? liveHR.value : saved.value?.hr_avg ?? null);
-const badgeKcal = computed(() => (hkSupported && !session.value?.completed_at) ? liveKcal.value : saved.value?.active_kcal ?? null);
+const badgeKcal = computed(() => {
+  const v = (hkSupported && !session.value?.completed_at) ? liveKcal.value : saved.value?.active_kcal;
+  return v == null ? null : Math.round(v);
+});
+// L'Apple Watch non scrive il battito nel HealthKit dell'iPhone in tempo reale: lo
+// sincronizza a blocchi, ogni pochi minuti. Con una soglia di 30 secondi il badge
+// risultava "in attesa" per quasi tutto l'allenamento, pur avendo dati validi.
+const HK_STALE_MS = 5 * 60 * 1000;
+
 const hrStale = computed(() =>
   hkSupported && !session.value?.completed_at &&
-  (!lastSampleAt.value || now.value - lastSampleAt.value > 30000));
+  (!lastSampleAt.value || now.value - lastSampleAt.value > HK_STALE_MS));
+
+// Età dell'ultimo campione ricevuto, per non far sparire un valore ancora utile:
+// null finché non arriva nulla, altrimenti "ora" / "N min".
+const sampleAge = computed(() => {
+  if (!lastSampleAt.value || !hkSupported || session.value?.completed_at) return null;
+  const minutes = Math.floor((now.value - lastSampleAt.value) / 60000);
+  return minutes < 1 ? 'ora' : `${minutes} min`;
+});
 
 function fmtDateTime(iso) {
   if (!iso) return '';
@@ -241,14 +258,25 @@ onMounted(async () => {
           hkUnsub = healthkit.onSample((s) => {
             lastSampleAt.value = Date.now();
             if (s.type === 'heartRate') liveHR.value = Math.round(s.value);
-            else if (s.type === 'activeEnergy') liveKcal.value = Math.round((liveKcal.value || 0) + s.value);
+            // Accumulo NON arrotondato: i campioni di energia attiva del Watch valgono
+            // frazioni di kcal, e arrotondare a ogni somma parziale azzererebbe il
+            // totale per sempre (0 + 0.02 → 0, ripetuto per decine di campioni).
+            // L'arrotondamento avviene solo in visualizzazione, in badgeKcal.
+            else if (s.type === 'activeEnergy') liveKcal.value = (liveKcal.value || 0) + s.value;
           });
-          await healthkit.start();
+          // Stesso normalizzatore usato per summary(): PostgREST serializza
+          // started_at con 6 decimali, che il parser ISO nativo non accetta.
+          await healthkit.start(new Date(session.value.started_at).toISOString());
+        } else {
+          hkError.value = auth.error || 'Accesso ai dati di salute non concesso';
         }
         // Tick periodico: rende hrStale reattivo (Date.now() da solo non è una dipendenza Vue)
         hkTickInterval = setInterval(() => { now.value = Date.now(); }, 5000);
-      } catch {
-        // HealthKit opzionale: non deve bloccare il caricamento della sessione
+      } catch (e) {
+        // HealthKit resta opzionale — non blocca il caricamento della sessione — ma
+        // l'errore va mostrato: ingoiarlo rende un plugin non registrato o un
+        // permesso negato indistinguibile da "il Watch non sta trasmettendo".
+        hkError.value = e?.message || String(e);
       }
     }
   } catch (e) {
@@ -283,12 +311,18 @@ onMounted(async () => {
         <div v-if="hkSupported || saved" class="mt-3 flex flex-wrap gap-2">
           <span class="inline-flex items-center gap-1 rounded-full bg-red-50 px-3 py-1 text-sm font-medium text-red-600">
             ❤️ {{ badgeHR != null ? badgeHR + ' bpm' : '—' }}
+            <span v-if="badgeHR != null && sampleAge" class="font-normal text-red-400">· {{ sampleAge }}</span>
           </span>
           <span class="inline-flex items-center gap-1 rounded-full bg-orange-50 px-3 py-1 text-sm font-medium text-orange-600">
             🔥 {{ badgeKcal != null ? badgeKcal + ' kcal' : '—' }}
           </span>
-          <span v-if="hrStale" class="inline-flex items-center rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-500">
-            Avvia un allenamento sul Watch
+          <span v-if="hkError" class="inline-flex items-center rounded-full bg-amber-50 px-3 py-1 text-xs text-amber-700">
+            ⚠️ {{ hkError }}
+          </span>
+          <span v-else-if="hrStale" class="inline-flex items-center rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-500">
+            <!-- Non dice "avvia un allenamento": l'allenamento può essere già in corso
+                 e i dati semplicemente non ancora sincronizzati dal Watch. -->
+            ⏳ {{ lastSampleAt ? 'In attesa di dati dal Watch' : 'Avvia un allenamento sul Watch' }}
           </span>
         </div>
       </div>

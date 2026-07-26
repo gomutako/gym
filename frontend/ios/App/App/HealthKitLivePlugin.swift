@@ -24,18 +24,41 @@ public class HealthKitLivePlugin: CAPPlugin {
         return f.date(from: s)
     }
 
+    // Restituisce anche `available` e `error`: senza di questi un dispositivo senza
+    // HealthKit, un permesso negato e un errore di autorizzazione sono
+    // indistinguibili lato JS, e la UI non può che mostrare "in attesa del Watch".
+    // Nota: `ok` indica che la richiesta è stata processata, NON che l'utente abbia
+    // concesso l'accesso — per la lettura Apple non lo rivela, per privacy.
     @objc func requestAuth(_ call: CAPPluginCall) {
         guard HKHealthStore.isHealthDataAvailable() else {
-            call.resolve(["granted": false]); return
+            CAPLog.print("⚡️ HealthKitLive: HealthKit non disponibile su questo dispositivo")
+            call.resolve([
+                "granted": false,
+                "available": false,
+                "error": "HealthKit non è disponibile su questo dispositivo",
+            ])
+            return
         }
-        store.requestAuthorization(toShare: nil, read: [hrType, enType]) { ok, _ in
-            call.resolve(["granted": ok])
+        store.requestAuthorization(toShare: nil, read: [hrType, enType]) { ok, err in
+            CAPLog.print("⚡️ HealthKitLive: requestAuthorization ok=\(ok) err=\(err?.localizedDescription ?? "nessuno")")
+            call.resolve([
+                "granted": ok,
+                "available": true,
+                "error": err?.localizedDescription as Any? ?? NSNull(),
+            ])
         }
     }
 
+    // `start` (ISO, opzionale) è l'istante da cui considerare i campioni: va passato
+    // l'inizio della sessione, non "adesso". L'Apple Watch sincronizza i campioni
+    // sull'iPhone a blocchi e con ritardo, e l'utente può aprire la schermata dopo aver
+    // avviato l'allenamento sul Watch: ancorando a `Date()` tutti i campioni misurati
+    // prima di quel momento verrebbero scartati per sempre.
     @objc func start(_ call: CAPPluginCall) {
-        startStream(type: hrType, event: "heartRate", unit: HKUnit.count().unitDivided(by: .minute())) { q in self.hrQuery = q }
-        startStream(type: enType, event: "activeEnergy", unit: HKUnit.kilocalorie()) { q in self.enQuery = q }
+        let from = call.getString("start").flatMap { parseISO($0) } ?? Date()
+        CAPLog.print("⚡️ HealthKitLive: start, campioni da \(iso.string(from: from))")
+        startStream(type: hrType, event: "heartRate", unit: HKUnit.count().unitDivided(by: .minute()), from: from) { q in self.hrQuery = q }
+        startStream(type: enType, event: "activeEnergy", unit: HKUnit.kilocalorie(), from: from) { q in self.enQuery = q }
         call.resolve()
     }
 
@@ -45,9 +68,14 @@ public class HealthKitLivePlugin: CAPPlugin {
         call.resolve()
     }
 
-    private func startStream(type: HKQuantityType, event: String, unit: HKUnit, keep: @escaping (HKAnchoredObjectQuery) -> Void) {
-        let handler: (HKAnchoredObjectQuery, [HKSample]?, [HKDeletedObject]?, HKQueryAnchor?, Error?) -> Void = { [weak self] _, samples, _, _, _ in
+    private func startStream(type: HKQuantityType, event: String, unit: HKUnit, from: Date, keep: @escaping (HKAnchoredObjectQuery) -> Void) {
+        let handler: (HKAnchoredObjectQuery, [HKSample]?, [HKDeletedObject]?, HKQueryAnchor?, Error?) -> Void = { [weak self] _, samples, _, _, err in
             guard let self = self else { return }
+            if let err = err {
+                CAPLog.print("⚡️ HealthKitLive: query \(event) in errore: \(err.localizedDescription)")
+                return
+            }
+            CAPLog.print("⚡️ HealthKitLive: \(event) \((samples ?? []).count) campioni")
             for s in (samples as? [HKQuantitySample]) ?? [] {
                 let value = s.quantity.doubleValue(for: unit)
                 self.notifyListeners(event, data: [
@@ -56,10 +84,9 @@ public class HealthKitLivePlugin: CAPPlugin {
                 ])
             }
         }
-        // Ancora la query a "adesso": senza predicate, la prima resultsHandler
-        // consegnerebbe l'intera storia HealthKit dell'utente invece dei soli
-        // campioni della sessione corrente.
-        let pred = HKQuery.predicateForSamples(withStart: Date(), end: nil, options: .strictStartDate)
+        // Il predicate limita la query alla finestra della sessione: senza di esso la
+        // prima resultsHandler consegnerebbe l'intera storia HealthKit dell'utente.
+        let pred = HKQuery.predicateForSamples(withStart: from, end: nil, options: .strictStartDate)
         let q = HKAnchoredObjectQuery(type: type, predicate: pred, anchor: nil,
                                       limit: HKObjectQueryNoLimit, resultsHandler: handler)
         q.updateHandler = handler

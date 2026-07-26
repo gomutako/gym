@@ -14,14 +14,21 @@ export function isSupported() {
   return native;
 }
 
+// Ritorna { granted, available, error }. `error` non null spiega PERCHÉ i dati
+// non arriveranno: senza questo la UI non distingue un permesso negato da un
+// Watch che non sta trasmettendo.
 export async function requestAuth() {
-  if (!native) return { granted: false };
+  if (!native) {
+    return { granted: false, available: false, error: 'HealthKit richiede l\'app iOS nativa' };
+  }
   return HealthKitLive.requestAuth();
 }
 
-export async function start() {
+// startISO: inizio della sessione. I campioni misurati prima non sono ancora arrivati
+// dal Watch quando la schermata si apre, quindi ancorare a "adesso" li perderebbe.
+export async function start(startISO) {
   if (!native) return;
-  await HealthKitLive.start();
+  await HealthKitLive.start(startISO ? { start: startISO } : {});
 }
 
 export async function stop() {
