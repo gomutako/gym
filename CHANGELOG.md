@@ -6,7 +6,22 @@ versionamento [SemVer](https://semver.org/lang/it/).
 
 ## [Non rilasciato]
 
+## [1.4.0] — 2026-07-26
+
+Diagnostica di servizio, crediti, e una serie di correzioni all'interfaccia iOS emerse
+dall'uso sul device.
+
 ### Aggiunto
+- **Versione e crediti** in fondo al profilo di ogni utente: fonte del catalogo esercizi
+  (free-exercise-db, pubblico dominio), librerie open source con licenza MIT, e una nota
+  su come vengono trattati i dati di Apple Health. Le due categorie restano distinte
+  perché lo sono anche giuridicamente: la prima è cortesia, la seconda è dovuta.
+- **Filtri per ruolo e stato abbonamento** nella sezione Utenti, combinabili con la
+  ricerca. Lo stato include "Senza abbonamento", perché le popolazioni sono tre e chi non
+  ne ha mai avuto uno non è "scaduto".
+- Il **ruolo** nella tabella utenti è ora una chip colorata, con tinte fuori dalla scala
+  usata dagli abbonamenti per non farlo leggere come uno stato.
+- **Titoli di pagina** su Profilo, Utenti, Prenotazioni, Allena, Esercizi e Corsi.
 - **Badge stato servizi** nella dashboard admin: ambiente attivo (cloud o locale), stato
   e latenza di backend e Supabase, versione del backend a confronto con quella dell'app,
   uptime del servizio e scadenza della sessione. Tre livelli — verde, giallo, rosso —
@@ -33,6 +48,8 @@ versionamento [SemVer](https://semver.org/lang/it/).
   sotto i 16px la WKWebView ingrandisce da sé. Bloccata la scala nel meta viewport
   (`maximum-scale=1, user-scalable=no`), come nel template Capacitor. Nota: Safari mobile
   ignora `user-scalable` dal 2016, quindi sul sito web lo zoom sui campi resta.
+- L'**intestazione del profilo** occupava mezzo schermo prima di mostrare un dato utile:
+  avatar e dati ora sono affiancati, con l'azione di modifica come icona.
 
 ## [1.3.0] — 2026-07-26
 
