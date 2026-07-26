@@ -6,6 +6,12 @@ versionamento [SemVer](https://semver.org/lang/it/).
 
 ## [Non rilasciato]
 
+### Aggiunto
+- **Tab bar nativa su iOS**: nell'app la navigazione è ora una `UITabBar` di sistema —
+  blur, tipografia e safe area gestite da UIKit — mentre il web continua a usare la barra
+  HTML. Le voci restano definite in un unico modulo condiviso (`lib/nav-tabs.js`), così
+  non possono divergere fra le due implementazioni.
+
 ## [1.4.0] — 2026-07-26
 
 Diagnostica di servizio, crediti, e una serie di correzioni all'interfaccia iOS emerse
