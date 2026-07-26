@@ -104,9 +104,11 @@ const subsLoading = ref(true);
 const subSortKey = ref('end_date'); // 'start_date' | 'end_date' | 'status'
 const subSortDir = ref('desc');
 
+// Forma canonica delle chip: fondo -100, testo -700. Prima "expired" stava a
+// 50/600, cioè la stessa idea detta con tonalità diverse da ClientCard.
 const badgeClass = {
   active: 'bg-emerald-100 text-emerald-700',
-  expired: 'bg-rose-50 text-rose-600',
+  expired: 'bg-red-100 text-red-700',
   scheduled: 'bg-amber-100 text-amber-700',
 };
 
@@ -280,8 +282,8 @@ async function logout() {
 <template>
   <div class="space-y-5">
     <h1 class="text-lg font-bold text-gray-900">Profilo</h1>
-    <p v-if="error && !editing" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{{ error }}</p>
-    <p v-if="message" class="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-600">{{ message }}</p>
+    <p v-if="error && !editing" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
+    <p v-if="message" class="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{{ message }}</p>
 
     <!-- Intestazione profilo: avatar a sinistra, dati di fianco. La disposizione
          verticale centrata occupava mezzo schermo su mobile prima ancora di
@@ -297,7 +299,7 @@ async function logout() {
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-2">
             <p class="truncate font-bold text-gray-900">{{ fullName }}</p>
-            <span class="shrink-0 rounded-full bg-brand/10 px-2 py-0.5 text-[11px] font-semibold text-brand">
+            <span class="shrink-0 rounded-full bg-brand/10 px-2 py-0.5 text-[11px] font-semibold text-brand-700">
               {{ roleLabel[role] || role }}
             </span>
           </div>
@@ -352,7 +354,7 @@ async function logout() {
 
     <!-- Form modifica dati in pop-up -->
     <Modal :open="editing" title="Dati personali" @close="editing = false">
-      <p v-if="error" class="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{{ error }}</p>
+      <p v-if="error" class="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
       <form class="space-y-3" @submit.prevent="save">
         <div>
           <label class="mb-1 block text-xs font-medium text-gray-500">Foto profilo</label>
@@ -461,7 +463,7 @@ async function logout() {
           :key="opt.value"
           class="flex flex-col items-center gap-1 rounded-xl border py-3 text-xs font-semibold active:scale-95"
           :class="mode === opt.value
-            ? 'border-brand bg-brand/10 text-brand'
+            ? 'border-brand bg-brand/10 text-brand-700'
             : 'border-gray-300 text-gray-600'"
           @click="theme.setMode(opt.value)"
         >
@@ -599,7 +601,7 @@ async function logout() {
                       <span v-if="s.archived" class="ml-1 rounded bg-gray-100 px-1 py-0.5 text-[10px] font-semibold text-gray-500">Disattivata</span>
                     </p>
                     <div v-if="s.goal || s.level" class="mt-0.5 flex flex-wrap gap-1">
-                      <span v-if="s.goal" class="rounded-full bg-brand/10 px-2 py-0.5 text-[10px] font-semibold capitalize text-brand">{{ s.goal }}</span>
+                      <span v-if="s.goal" class="rounded-full bg-brand/10 px-2 py-0.5 text-[10px] font-semibold capitalize text-brand-700">{{ s.goal }}</span>
                       <span v-if="s.level" class="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold capitalize text-gray-500">{{ s.level }}</span>
                     </div>
                     <div class="mt-0.5 flex flex-wrap items-center gap-1">
@@ -676,7 +678,7 @@ async function logout() {
     <Modal :open="detailOpen" :title="detailScheda?.title || 'Scheda'" @close="detailOpen = false">
       <div v-if="detailScheda">
         <div v-if="detailScheda.goal || detailScheda.level" class="mb-3 flex flex-wrap gap-1">
-          <span v-if="detailScheda.goal" class="rounded-full bg-brand/10 px-2 py-0.5 text-[10px] font-semibold capitalize text-brand">{{ detailScheda.goal }}</span>
+          <span v-if="detailScheda.goal" class="rounded-full bg-brand/10 px-2 py-0.5 text-[10px] font-semibold capitalize text-brand-700">{{ detailScheda.goal }}</span>
           <span v-if="detailScheda.level" class="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold capitalize text-gray-500">{{ detailScheda.level }}</span>
         </div>
         <WorkoutDays
@@ -688,7 +690,7 @@ async function logout() {
     </Modal>
 
     <button
-      class="w-full rounded-xl border border-rose-200 bg-rose-50 py-3 font-semibold text-rose-600 active:scale-95"
+      class="w-full rounded-xl border border-red-200 bg-red-50 py-3 font-semibold text-red-700 active:scale-95"
       @click="logout"
     >
       Esci

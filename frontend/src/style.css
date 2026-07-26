@@ -71,15 +71,15 @@ html.dark .ring-brand { --tw-ring-color: #6b64e8; }
 
 /* Stati — su fondo scuro: riempimenti traslucidi + testo schiarito */
 html.dark .bg-red-50 { background-color: rgba(239, 68, 68, 0.14); }
-html.dark .text-red-600 { color: #f87171; }
-html.dark .bg-rose-50 { background-color: rgba(244, 63, 94, 0.14); }
-html.dark .bg-rose-100 { background-color: rgba(244, 63, 94, 0.2); }
-html.dark .text-rose-600,
-html.dark .text-rose-500 { color: #fb7185; }
-html.dark .border-rose-200 { border-color: rgba(244, 63, 94, 0.3); }
+html.dark .text-red-700 { color: #f87171; }
+html.dark .bg-red-50 { background-color: rgba(244, 63, 94, 0.14); }
+html.dark .bg-red-100 { background-color: rgba(244, 63, 94, 0.2); }
+html.dark .text-red-700,
+html.dark .text-red-500 { color: #fb7185; }
+html.dark .border-red-200 { border-color: rgba(244, 63, 94, 0.3); }
 html.dark .bg-emerald-50 { background-color: rgba(16, 185, 129, 0.14); }
 html.dark .bg-emerald-100 { background-color: rgba(16, 185, 129, 0.2); }
-html.dark .text-emerald-600 { color: #34d399; }
+html.dark .text-emerald-700 { color: #34d399; }
 html.dark .text-emerald-700 { color: #6ee7b7; }
 html.dark .bg-amber-50 { background-color: rgba(245, 158, 11, 0.14); }
 html.dark .bg-amber-100 { background-color: rgba(245, 158, 11, 0.2); }

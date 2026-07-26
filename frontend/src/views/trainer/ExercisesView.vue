@@ -300,7 +300,7 @@ onMounted(load);
 <template>
   <div class="space-y-4">
     <h1 class="text-lg font-bold text-gray-900">Esercizi</h1>
-    <p v-if="error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{{ error }}</p>
+    <p v-if="error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
 
     <!-- Toolbar: ricerca + filtro gruppo + nuovo -->
     <div class="flex gap-2">
@@ -543,7 +543,7 @@ onMounted(load);
                       </svg>
                     </button>
                     <button
-                      class="rounded-lg p-2 text-rose-600 active:scale-90"
+                      class="rounded-lg p-2 text-red-700 active:scale-90"
                       title="Elimina" aria-label="Elimina" @click="remove(ex)"
                     >
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"

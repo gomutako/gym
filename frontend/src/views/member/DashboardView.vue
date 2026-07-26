@@ -97,7 +97,7 @@ onMounted(async () => {
     <!-- Stato abbonamento -->
     <section
       class="rounded-2xl p-4 text-white shadow-sm"
-      :class="isSubscriptionActive ? 'bg-emerald-500' : 'bg-rose-500'"
+      :class="isSubscriptionActive ? 'bg-emerald-500' : 'bg-red-500'"
     >
       <p class="text-sm opacity-90">Abbonamento</p>
       <p class="text-2xl font-bold">

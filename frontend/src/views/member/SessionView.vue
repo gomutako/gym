@@ -309,7 +309,7 @@ onMounted(async () => {
 
 <template>
   <div class="space-y-4">
-    <p v-if="error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{{ error }}</p>
+    <p v-if="error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
     <p v-if="loading" class="text-sm text-gray-400">Caricamento…</p>
 
     <template v-else-if="session">
@@ -329,7 +329,7 @@ onMounted(async () => {
         </div>
 
         <div v-if="hkSupported || saved" class="mt-3 flex flex-wrap gap-2">
-          <span class="inline-flex items-center gap-1 rounded-full bg-red-50 px-3 py-1 text-sm font-medium text-red-600">
+          <span class="inline-flex items-center gap-1 rounded-full bg-red-50 px-3 py-1 text-sm font-medium text-red-700">
             ❤️ {{ badgeHR != null ? badgeHR + ' bpm' : '—' }}
             <span v-if="badgeHR != null && sampleAge" class="font-normal text-red-400">· {{ sampleAge }}</span>
           </span>
@@ -369,7 +369,7 @@ onMounted(async () => {
                 <div class="mt-1 flex flex-wrap items-center gap-1">
                   <span
                     v-if="catalogById[current.exercise_id]?.muscle_group"
-                    class="inline-block rounded-full bg-brand/10 px-2 py-0.5 text-xs font-semibold text-brand"
+                    class="inline-block rounded-full bg-brand/10 px-2 py-0.5 text-xs font-semibold text-brand-700"
                   >
                     {{ catalogById[current.exercise_id].muscle_group }}
                   </span>
@@ -503,11 +503,11 @@ onMounted(async () => {
                       <template v-else>Fatto</template>
                     </button>
 
-                    <button class="text-gray-300 active:text-rose-500" @click="removeSet(index, ri)" aria-label="Rimuovi serie">✕</button>
+                    <button class="text-gray-300 active:text-red-500" @click="removeSet(index, ri)" aria-label="Rimuovi serie">✕</button>
                   </div>
 
                   <button
-                    class="mt-1 flex w-full items-center justify-center gap-1.5 rounded-lg bg-brand/10 py-2 text-xs font-semibold text-brand active:scale-95"
+                    class="mt-1 flex w-full items-center justify-center gap-1.5 rounded-lg bg-brand/10 py-2 text-xs font-semibold text-brand-700 active:scale-95"
                     @click="addSet(index)"
                   >
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"

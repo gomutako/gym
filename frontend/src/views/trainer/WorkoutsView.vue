@@ -463,8 +463,8 @@ watch(selectedMemberId, loadSchede);
       <ClientCard v-if="member" :member="member" />
     </div>
 
-    <p v-if="error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{{ error }}</p>
-    <p v-if="message" class="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-600">{{ message }}</p>
+    <p v-if="error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
+    <p v-if="message" class="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{{ message }}</p>
     <p v-if="loading" class="text-sm text-gray-400">Caricamento…</p>
 
     <!-- Lista schede del cliente + nuova -->
@@ -557,7 +557,7 @@ watch(selectedMemberId, loadSchede);
                         <div class="min-w-0">
                           <p class="truncate font-medium text-gray-900">{{ s.title || 'Senza titolo' }}</p>
                           <div v-if="s.goal || s.level" class="mt-0.5 flex flex-wrap gap-1">
-                            <span v-if="s.goal" class="rounded-full bg-brand/10 px-2 py-0.5 text-[10px] font-semibold capitalize text-brand">{{ s.goal }}</span>
+                            <span v-if="s.goal" class="rounded-full bg-brand/10 px-2 py-0.5 text-[10px] font-semibold capitalize text-brand-700">{{ s.goal }}</span>
                             <span v-if="s.level" class="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold capitalize text-gray-500">{{ s.level }}</span>
                           </div>
                           <div class="mt-0.5 flex flex-wrap items-center gap-1">
@@ -721,7 +721,7 @@ watch(selectedMemberId, loadSchede);
           </button>
           <button
             v-if="currentId"
-            class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-600"
+            class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700"
             @click="deleteScheda"
           >
             Elimina
@@ -782,7 +782,7 @@ watch(selectedMemberId, loadSchede);
 
     <!-- Nuova scheda da un modello -->
     <Modal :open="tplPickOpen" title="Nuova scheda da modello" @close="tplPickOpen = false">
-      <p v-if="error" class="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{{ error }}</p>
+      <p v-if="error" class="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
       <p class="mb-3 text-sm text-gray-500">
         Scegli un modello: verrà creata una scheda per <b>{{ memberName }}</b> e si aprirà l'editor.
       </p>
@@ -874,7 +874,7 @@ watch(selectedMemberId, loadSchede);
 
     <!-- Salva scheda come modello -->
     <Modal :open="saveTplOpen" title="Salva come modello" @close="saveTplOpen = false">
-      <p v-if="error" class="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{{ error }}</p>
+      <p v-if="error" class="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
       <p class="mb-3 text-sm text-gray-500">
         Crea un modello riutilizzabile dalle giornate di questa scheda (non legato al cliente).
       </p>

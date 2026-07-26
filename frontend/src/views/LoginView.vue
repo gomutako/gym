@@ -96,7 +96,7 @@ function setMode(next) {
 
       <!-- Card form -->
       <div class="rounded-3xl bg-white p-6 shadow-xl shadow-gray-900/5 ring-1 ring-gray-100">
-      <p v-if="mode === 'forgot' && resetSent" class="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-600">
+      <p v-if="mode === 'forgot' && resetSent" class="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
         Se l'email è registrata, riceverai un link per reimpostare la password. Controlla anche lo spam.
       </p>
 
@@ -176,7 +176,7 @@ function setMode(next) {
           </div>
         </div>
 
-        <p v-if="error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
+        <p v-if="error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
           {{ error }}
         </p>
 

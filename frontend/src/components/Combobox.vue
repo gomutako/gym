@@ -203,7 +203,7 @@ onBeforeUnmount(() => {
         :aria-selected="opt.value === modelValue"
         class="flex cursor-pointer items-center gap-2 px-4 py-2 text-sm"
         :class="[
-          i === highlighted ? 'bg-brand/10 text-brand' : 'text-gray-700',
+          i === highlighted ? 'bg-brand/10 text-brand-700' : 'text-gray-700',
           opt.value === modelValue && 'font-semibold',
         ]"
         @mouseenter="highlighted = i"

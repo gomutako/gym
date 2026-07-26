@@ -258,8 +258,8 @@ onMounted(load);
 
 <template>
   <div class="space-y-4">
-    <p v-if="error && !assignOpen" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{{ error }}</p>
-    <p v-if="toast" class="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-600">{{ toast }}</p>
+    <p v-if="error && !assignOpen" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
+    <p v-if="toast" class="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{{ toast }}</p>
 
     <div v-if="!editing" class="flex items-center justify-between">
       <h1 class="text-lg font-bold text-gray-900">Modelli</h1>
@@ -318,7 +318,7 @@ onMounted(load);
               <td class="px-3 py-2">
                 <p class="truncate font-medium text-gray-900">{{ t.title }}</p>
                 <div v-if="t.goal || t.level" class="mt-0.5 flex flex-wrap gap-1">
-                  <span v-if="t.goal" class="rounded-full bg-brand/10 px-2 py-0.5 text-[10px] font-semibold capitalize text-brand">{{ t.goal }}</span>
+                  <span v-if="t.goal" class="rounded-full bg-brand/10 px-2 py-0.5 text-[10px] font-semibold capitalize text-brand-700">{{ t.goal }}</span>
                   <span v-if="t.level" class="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold capitalize text-gray-500">{{ t.level }}</span>
                 </div>
               </td>
@@ -417,7 +417,7 @@ onMounted(load);
     <Modal :open="detailOpen" :title="detailTemplate?.title || 'Modello'" @close="detailOpen = false">
       <div v-if="detailTemplate">
         <div class="mb-3 flex flex-wrap gap-1">
-          <span v-if="detailTemplate.goal" class="rounded-full bg-brand/10 px-2 py-0.5 text-[10px] font-semibold capitalize text-brand">{{ detailTemplate.goal }}</span>
+          <span v-if="detailTemplate.goal" class="rounded-full bg-brand/10 px-2 py-0.5 text-[10px] font-semibold capitalize text-brand-700">{{ detailTemplate.goal }}</span>
           <span v-if="detailTemplate.level" class="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold capitalize text-gray-500">{{ detailTemplate.level }}</span>
         </div>
         <WorkoutDays
@@ -440,7 +440,7 @@ onMounted(load);
               Modifica
             </button>
             <button
-              class="flex-1 rounded-lg border border-rose-200 bg-rose-50 py-2 text-sm font-semibold text-rose-600 active:scale-95"
+              class="flex-1 rounded-lg border border-red-200 bg-red-50 py-2 text-sm font-semibold text-red-700 active:scale-95"
               @click="removeTemplate(detailTemplate)"
             >
               Elimina
@@ -452,7 +452,7 @@ onMounted(load);
 
     <!-- Modale assegnazione -->
     <Modal :open="assignOpen" :title="assignTemplate?.title || 'Assegna modello'" @close="assignOpen = false">
-      <p v-if="error" class="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{{ error }}</p>
+      <p v-if="error" class="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
       <p class="mb-3 text-sm text-gray-500">
         Crea una copia di questo modello nelle schede del cliente scelto.
       </p>

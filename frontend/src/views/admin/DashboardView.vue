@@ -31,7 +31,7 @@ onMounted(async () => {
     <ServiceStatusBadge />
     <IdentityCard />
 
-    <p v-if="error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{{ error }}</p>
+    <p v-if="error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
     <p v-if="loading" class="text-sm text-gray-400">Caricamento report…</p>
 
     <template v-else-if="report">
@@ -72,7 +72,7 @@ onMounted(async () => {
             <div class="mt-2 h-2 overflow-hidden rounded-full bg-gray-100">
               <div
                 class="h-full rounded-full"
-                :class="r.fillRate >= 100 ? 'bg-rose-500' : 'bg-emerald-500'"
+                :class="r.fillRate >= 100 ? 'bg-red-500' : 'bg-emerald-500'"
                 :style="{ width: Math.min(r.fillRate, 100) + '%' }"
               ></div>
             </div>
