@@ -12,6 +12,12 @@ versionamento [SemVer](https://semver.org/lang/it/).
   HTML. Le voci restano definite in un unico modulo condiviso (`lib/nav-tabs.js`), così
   non possono divergere fra le due implementazioni.
 
+### Corretto
+- **Il fondo nativo dell'app iOS non è più nero**: quello predefinito era il colore di
+  *sistema*, quindi con iOS in tema scuro restava nero anche con l'app in tema chiaro, e si
+  notava nella zona di rimbalzo dello scroll. Ora è il fondo pagina vero e segue il tema
+  scelto nell'app, login compreso.
+
 ### Modificato
 - **Nuovo schema cromatico rosa antico**: il primario passa dall'indigo a una scala derivata
   da `#D3919E` che ne conserva la tonalità su dieci passi — la tinta scelta vive su superfici,
