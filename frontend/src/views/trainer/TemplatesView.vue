@@ -2,9 +2,18 @@
 // Trainer/Admin: libreria di MODELLI di scheda (schede preconfezionate).
 // Tabella ordinabile e filtrabile (ricerca libera + filtro Tipo e Livello).
 // Da ogni riga: dettaglio (giornate + esercizi) e assegnazione a un cliente
-// (il backend clona il modello nelle schede del member).
+// (l'assegnazione ne CLONA il contenuto nelle schede del member: modificare il
+// modello dopo non tocca le schede già assegnate).
 import { ref, computed, watch, onMounted } from 'vue';
-import { api } from '@/lib/api';
+import { storeToRefs } from 'pinia';
+import { useAuthStore } from '@/stores/auth';
+import { listTemplates, createTemplate, updateTemplate, deleteTemplate } from '@/lib/data/templates';
+// alias: `assignTemplate` è già il nome del ref con il modello selezionato
+import { assignTemplate as assignTemplateToMember } from '@/lib/data/workouts';
+import { listMembers } from '@/lib/data/profiles';
+import { listExercises } from '@/lib/data/exercises';
+
+const { user } = storeToRefs(useAuthStore());
 import { exerciseImageUrl } from '@/lib/storage';
 import Modal from '@/components/Modal.vue';
 import Combobox from '@/components/Combobox.vue';
@@ -103,10 +112,10 @@ async function saveTemplate() {
       level: eLevel.value || null,
       days_json: normalizeDays(eDays.value),
     };
-    if (editId.value) await api.patch(`/api/templates/${editId.value}`, payload);
-    else await api.post('/api/templates', payload);
+    if (editId.value) await updateTemplate(editId.value, payload);
+    else await createTemplate(payload);
     editing.value = false;
-    templates.value = await api.get('/api/templates');
+    templates.value = await listTemplates();
     toast.value = 'Modello salvato ✔';
     setTimeout(() => (toast.value = ''), 4000);
   } catch (e) {
@@ -119,9 +128,9 @@ async function saveTemplate() {
 async function removeTemplate(t) {
   if (!confirm(`Eliminare il modello "${t.title}"?`)) return;
   try {
-    await api.del(`/api/templates/${t.id}`);
+    await deleteTemplate(t.id);
     detailOpen.value = false;
-    templates.value = await api.get('/api/templates');
+    templates.value = await listTemplates();
     toast.value = 'Modello eliminato ✔';
     setTimeout(() => (toast.value = ''), 4000);
   } catch (e) {
@@ -133,9 +142,9 @@ async function load() {
   loading.value = true;
   try {
     [templates.value, members.value, catalog.value] = await Promise.all([
-      api.get('/api/templates'),
-      api.get('/api/members'),
-      api.get('/api/exercises'),
+      listTemplates(),
+      listMembers(),
+      listExercises(),
     ]);
   } catch (e) {
     error.value = e.message;
@@ -239,9 +248,7 @@ async function assign() {
   assigning.value = true;
   error.value = '';
   try {
-    await api.post(`/api/templates/${assignTemplate.value.id}/assign`, {
-      member_id: assignMemberId.value,
-    });
+    await assignTemplateToMember(assignTemplate.value.id, assignMemberId.value, user.value.id);
     const who = memberOptions.value.find((o) => o.value === assignMemberId.value)?.label || 'cliente';
     toast.value = `"${assignTemplate.value.title}" assegnato a ${who} ✔`;
     assignOpen.value = false;

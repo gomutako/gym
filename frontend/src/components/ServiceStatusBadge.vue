@@ -1,7 +1,7 @@
 <script setup>
 // Badge diagnostico della dashboard admin: collassato mostra un pallino e
 // l'ambiente, espanso i dettagli. Vive solo nella dashboard admin, che è già
-// riservata per ruolo: la protezione vera sta sulla rotta backend.
+// riservata per ruolo: la protezione vera sta nella RLS del database.
 import { ref, computed, onMounted } from 'vue';
 import { useAuthStore } from '@/stores/auth';
 import { collect, overallStatus } from '@/lib/diagnostics';
@@ -45,13 +45,6 @@ function fmtMs(ms) {
   return ms == null ? '—' : `${ms} ms`;
 }
 
-function fmtUptime(s) {
-  if (s == null) return '—';
-  if (s < 60) return `${s} s`;
-  if (s < 3600) return `${Math.round(s / 60)} min`;
-  return `${Math.floor(s / 3600)} h ${Math.round((s % 3600) / 60)} min`;
-}
-
 function fmtExpiry(date) {
   if (!date) return '—';
   return date.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
@@ -72,21 +65,6 @@ function fmtExpiry(date) {
     </button>
 
     <div v-if="expanded && data" class="mt-3 space-y-3 border-t border-gray-100 pt-3 text-xs">
-      <!-- Backend -->
-      <div>
-        <div class="flex items-center justify-between">
-          <span class="font-semibold text-gray-700">Backend</span>
-          <span :class="data.backend.ok ? 'text-emerald-700' : 'text-red-700'">
-            {{ data.backend.ok ? 'ok' : 'non raggiungibile' }} · {{ fmtMs(data.backend.latencyMs) }}
-          </span>
-        </div>
-        <p class="text-gray-400">{{ data.backend.url }}</p>
-        <p class="text-gray-500">
-          versione {{ data.backend.version || '—' }} · attivo da {{ fmtUptime(data.backend.uptimeS) }}
-        </p>
-        <p v-if="data.backend.error" class="text-amber-700">⚠️ {{ data.backend.error }}</p>
-      </div>
-
       <!-- Supabase -->
       <div>
         <div class="flex items-center justify-between">
@@ -97,6 +75,45 @@ function fmtExpiry(date) {
         </div>
         <p class="text-gray-400">{{ data.supabase.url }}</p>
         <p v-if="data.supabase.error" class="text-red-700">{{ data.supabase.error }}</p>
+      </div>
+
+      <!-- Schema del database: il disallineamento fra codice e migrazioni è il
+           guasto che non dà errori, quindi è quello che il badge esiste per vedere -->
+      <div>
+        <div class="flex items-center justify-between">
+          <span class="font-semibold text-gray-700">Schema database</span>
+          <span :class="data.schema.ok ? 'text-emerald-700' : 'text-amber-700'">
+            {{ data.schema.ok ? 'allineato' : 'disallineato' }}
+          </span>
+        </div>
+        <p class="text-gray-400">
+          applicata {{ data.schema.applied || '—' }} · attesa {{ data.schema.expected || '—' }}
+        </p>
+        <p v-if="data.schema.error" class="text-amber-700">⚠️ {{ data.schema.error }}</p>
+      </div>
+
+      <!-- Edge Function -->
+      <div>
+        <div class="flex items-center justify-between">
+          <span class="font-semibold text-gray-700">Edge Function</span>
+          <span :class="data.edgeFunction.ok ? 'text-emerald-700' : 'text-amber-700'">
+            {{ data.edgeFunction.ok ? 'ok' : 'non raggiungibile' }} · {{ fmtMs(data.edgeFunction.latencyMs) }}
+          </span>
+        </div>
+        <p class="text-gray-400">{{ data.edgeFunction.name }} — cambio email</p>
+        <p v-if="data.edgeFunction.error" class="text-amber-700">⚠️ {{ data.edgeFunction.error }}</p>
+      </div>
+
+      <!-- Storage -->
+      <div>
+        <div class="flex items-center justify-between">
+          <span class="font-semibold text-gray-700">Storage</span>
+          <span :class="data.storage.ok ? 'text-emerald-700' : 'text-amber-700'">
+            {{ data.storage.ok ? 'ok' : 'immagini non servite' }} · {{ fmtMs(data.storage.latencyMs) }}
+          </span>
+        </div>
+        <p class="text-gray-400">bucket exercise-images</p>
+        <p v-if="data.storage.error" class="text-amber-700">⚠️ {{ data.storage.error }}</p>
       </div>
 
       <!-- Ambiente e sessione -->

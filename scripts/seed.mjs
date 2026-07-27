@@ -13,7 +13,10 @@ import { createClient } from '@supabase/supabase-js';
 // Il seeder usa l'API HTTPS di Supabase (non la connessione Postgres diretta),
 // quindi funziona anche contro il Cloud (nessun problema IPv6 come `db push`).
 const useCloud = process.argv.includes('--cloud') || process.env.SEED_TARGET === 'cloud';
-const envFile = useCloud ? '../backend/.env.production' : '../backend/.env';
+// Credenziali di servizio alla root del repo (gitignorate): `backend/` non
+// esiste più, e queste chiavi servono al seed e agli script di manutenzione,
+// non a un'applicazione.
+const envFile = useCloud ? '../.env.production' : '../.env.local';
 
 // Le variabili già esportate nell'ambiente hanno la precedenza (dotenv non le
 // sovrascrive): puoi quindi anche fare

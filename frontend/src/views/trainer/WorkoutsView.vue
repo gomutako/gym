@@ -5,7 +5,14 @@
 // con serie/ripetizioni/recupero.
 import { ref, onMounted, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { api } from '@/lib/api';
+import { storeToRefs } from 'pinia';
+import { useAuthStore } from '@/stores/auth';
+import {
+  listWorkoutsForMember, createWorkout, updateWorkout, setWorkoutActive, deleteWorkout,
+} from '@/lib/data/workouts';
+import { createTemplate, listTemplates } from '@/lib/data/templates';
+import { listMembers } from '@/lib/data/profiles';
+import { listExercises } from '@/lib/data/exercises';
 import { exerciseImageUrl } from '@/lib/storage';
 import Combobox from '@/components/Combobox.vue';
 import Modal from '@/components/Modal.vue';
@@ -14,6 +21,10 @@ import ClientCard from '@/components/ClientCard.vue';
 
 const route = useRoute();
 const router = useRouter();
+// Serve per `trainer_id`: prima lo impostava il backend dal JWT, ora va passato
+// esplicitamente perché la policy workouts_write richiede trainer_id = auth.uid()
+// per i trainer (un admin può scrivere qualsiasi scheda).
+const { user } = storeToRefs(useAuthStore());
 
 const members = ref([]);
 const catalog = ref([]);
@@ -134,7 +145,7 @@ async function loadSchede() {
   if (!selectedMemberId.value) return;
   loading.value = true;
   try {
-    schede.value = await api.get(`/api/workouts/member/${selectedMemberId.value}`);
+    schede.value = await listWorkoutsForMember(selectedMemberId.value);
   } catch (e) {
     error.value = e.message;
   } finally {
@@ -237,8 +248,9 @@ async function newFromTemplate(tpl) {
   saving.value = true;
   error.value = '';
   try {
-    const created = await api.post('/api/workouts', {
+    const created = await createWorkout({
       member_id: selectedMemberId.value,
+      trainer_id: user.value.id,
       title: tpl.title,
       notes: tpl.description || '',
       goal: tpl.goal || null,
@@ -246,7 +258,7 @@ async function newFromTemplate(tpl) {
       days_json: normalizeDays(tpl.days_json),
     });
     tplPickOpen.value = false;
-    schede.value = await api.get(`/api/workouts/member/${selectedMemberId.value}`);
+    schede.value = await listWorkoutsForMember(selectedMemberId.value);
     editScheda(created); // apre l'editor sulla scheda appena creata
     message.value = 'Scheda creata dal modello — rifiniscila e salva ✔';
   } catch (e) {
@@ -289,7 +301,7 @@ async function saveAsTemplate() {
   stpSaving.value = true;
   error.value = '';
   try {
-    await api.post('/api/templates', {
+    await createTemplate({
       title: stpTitle.value.trim(),
       description: stpNotes.value.trim() || null,
       goal: stpGoal.value.trim() || null,
@@ -333,10 +345,11 @@ async function save() {
       days_json: normalizeDays(days.value),
     };
     if (currentId.value) {
-      await api.patch(`/api/workouts/${currentId.value}`, payload);
+      await updateWorkout(currentId.value, payload);
     } else {
-      const created = await api.post('/api/workouts', {
+      const created = await createWorkout({
         member_id: selectedMemberId.value,
+        trainer_id: user.value.id,
         ...payload,
       });
       currentId.value = created.id;
@@ -352,7 +365,7 @@ async function save() {
 
 // Ricarica la lista schede ma resta nell'editor corrente
 async function loadScheThenKeepEditing() {
-  schede.value = await api.get(`/api/workouts/member/${selectedMemberId.value}`);
+  schede.value = await listWorkoutsForMember(selectedMemberId.value);
   editing.value = true;
 }
 
@@ -394,8 +407,9 @@ async function duplicate() {
   dupSaving.value = true;
   error.value = '';
   try {
-    await api.post('/api/workouts', {
+    await createWorkout({
       member_id: dupTargetId.value,
+      trainer_id: user.value.id,
       title: dupTitle.value,
       notes: dupNotes.value,
       days_json: dupDays.value,
@@ -405,7 +419,7 @@ async function duplicate() {
     dupOpen.value = false;
     message.value = sameClient ? 'Scheda duplicata ✔' : `Scheda assegnata a ${targetName} ✔`;
     // La lista mostra il cliente selezionato: si aggiorna solo se è lo stesso
-    if (sameClient) schede.value = await api.get(`/api/workouts/member/${selectedMemberId.value}`);
+    if (sameClient) schede.value = await listWorkoutsForMember(selectedMemberId.value);
   } catch (e) {
     error.value = e.message;
   } finally {
@@ -418,7 +432,7 @@ async function toggleActive(s) {
   error.value = '';
   const next = !s.is_active;
   try {
-    await api.patch(`/api/workouts/${s.id}/active`, { is_active: next });
+    await setWorkoutActive(s.id, next);
     // Riflette l'esclusività in locale: se attivo questa, spengo le altre
     for (const w of schede.value) w.is_active = next && w.id === s.id;
     if (!next) s.is_active = false;
@@ -431,7 +445,7 @@ async function deleteScheda() {
   if (!currentId.value) return;
   if (!confirm('Eliminare questa scheda?')) return;
   try {
-    await api.del(`/api/workouts/${currentId.value}`);
+    await deleteWorkout(currentId.value);
     await loadSchede();
   } catch (e) {
     error.value = e.message;
@@ -441,9 +455,9 @@ async function deleteScheda() {
 onMounted(async () => {
   try {
     [members.value, catalog.value, templates.value] = await Promise.all([
-      api.get('/api/members'),
-      api.get('/api/exercises'),
-      api.get('/api/templates'),
+      listMembers(),
+      listExercises(),
+      listTemplates(),
     ]);
     await loadSchede();
   } catch (e) {

@@ -2,7 +2,15 @@
      Locale: usato da Supabase (Mailpit) via config.toml.
      Produzione: incollare questo HTML nel dashboard Supabase Cloud
      (Authentication → Email Templates → Reset Password).
-     Variabili disponibili: {{ .ConfirmationURL }} {{ .SiteURL }} {{ .Email }} -->
+     Variabili disponibili: {{ .ConfirmationURL }} {{ .TokenHash }} {{ .SiteURL }} {{ .Email }}
+
+     ⚠️ NON usare {{ .ConfirmationURL }}: quell'URL punta all'endpoint
+     /auth/v1/verify del progetto Supabase e poi rimbalza sul `redirectTo`
+     inviato dal client — che dentro l'app iOS è `capacitor://localhost`, uno
+     schema che nessun client di posta su iOS apre (l'utente resta bloccato).
+     Con {{ .SiteURL }} + {{ .TokenHash }} il link punta SEMPRE al dominio web
+     configurato lato Supabase, indipendentemente da dove è partita la
+     richiesta; la pagina scambia il token per una sessione con verifyOtp(). -->
 <div style="font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px; color: #111827;">
   <h1 style="font-size: 20px; margin: 0 0 8px;">Reimposta la tua password</h1>
   <p style="font-size: 14px; color: #4b5563; line-height: 1.5;">
@@ -10,8 +18,8 @@
     <strong>{{ .Email }}</strong>. Clicca il pulsante per scegliere una nuova password.
   </p>
   <p style="text-align: center; margin: 24px 0;">
-    <a href="{{ .ConfirmationURL }}"
-       style="display: inline-block; background: #4f46e5; color: #ffffff; text-decoration: none; font-weight: 600; font-size: 14px; padding: 12px 24px; border-radius: 12px;">
+    <a href="{{ .SiteURL }}/reset-password?token_hash={{ .TokenHash }}&type=recovery"
+       style="display: inline-block; background: #A45668; color: #ffffff; text-decoration: none; font-weight: 600; font-size: 14px; padding: 12px 24px; border-radius: 12px;">
       Reimposta password
     </a>
   </p>

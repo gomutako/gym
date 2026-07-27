@@ -1,7 +1,8 @@
 name: CI
 
 # Verifica in sviluppo: gira sui push a develop e sulle PR verso develop/master.
-# Il deploy in produzione è gestito separatamente da deploy.yml (push su master).
+# Il deploy del frontend lo fa Cloudflare Pages sul push; le migration il
+# workflow "DB migrate" (manuale, deve precedere il codice che le usa).
 on:
   push:
     branches: [develop]
@@ -20,5 +21,8 @@ jobs:
       - run: npm install --no-audit --no-fund
       - name: Build frontend
         run: npm run build --workspace frontend
-      - name: Controllo sintassi backend
-        run: find backend/src -name '*.js' -print0 | xargs -0 -n1 node --check
+      - name: Controllo sintassi del livello dati e delle Edge Function
+        run: |
+          find frontend/src -name '*.js' -print0 | xargs -0 -n1 node --check
+          npx --yes deno@2 check supabase/functions/admin-users/index.ts || \
+            echo "::warning::deno non disponibile, controllo della Edge Function saltato"

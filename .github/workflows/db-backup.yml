@@ -1,0 +1,133 @@
+name: DB backup
+
+# Backup del database Supabase Cloud: pg_dump → gzip → **cifratura GPG** → artifact.
+#
+# Perché serve: il piano Free di Supabase NON include backup automatici. Fino alla
+# migrazione lo faceva un timer systemd sull'EC2; spenta l'istanza resterebbe scoperto.
+#
+# 🔒 PERCHÉ LA CIFRATURA NON È OPZIONALE
+# Questo repository è PUBBLICO, e sui repo pubblici gli artifact di GitHub Actions
+# sono scaricabili da chiunque veda il repo. Il dump contiene i dati personali dei
+# clienti (nome, email, telefono, data di nascita, peso, note del trainer):
+# caricarlo in chiaro equivarrebbe a pubblicarli. Il job quindi **rifiuta di
+# partire** se il segreto della passphrase non è configurato, invece di degradare
+# a un upload non cifrato — un backup che perde i dati è peggio di nessun backup.
+#
+# Secret richiesti (Settings → Secrets and variables → Actions):
+#   SUPABASE_DB_URL     connection string del "Session pooler"
+#                       (Database → Connection string → Session pooler), password
+#                       percent-encoded. Lo stesso secret del workflow "DB migrate".
+#   BACKUP_PASSPHRASE   passphrase lunga e casuale per la cifratura simmetrica.
+#                       ⚠️ Conservala FUORI da GitHub (password manager): se la
+#                       perdi, gli archivi diventano illeggibili.
+#
+# Ripristino:
+#   gpg --decrypt --batch --passphrase '<BACKUP_PASSPHRASE>' gym-db-<stamp>.sql.gz.gpg \
+#     | gunzip | docker exec -i supabase_db_gym psql -U postgres -d postgres
+
+on:
+  # ⏸️ SCHEDULAZIONE DISATTIVATA finché i secret non sono configurati: senza,
+  # il job fallirebbe ogni notte generando solo notifiche. Per riattivarla basta
+  # togliere il commento dalle due righe qui sotto.
+  # Il minuto non tondo è voluto: gli orari "puliti" sono i più congestionati sui
+  # runner condivisi e le esecuzioni slittano.
+  #
+  # schedule:
+  #   - cron: '17 3 * * *'
+  workflow_dispatch:
+    inputs:
+      retention_days:
+        description: 'Giorni di conservazione di questo artifact'
+        type: string
+        default: '30'
+
+concurrency:
+  group: db-backup
+  cancel-in-progress: false
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verifica i prerequisiti
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          missing=0
+          [ -n "$SUPABASE_DB_URL" ]   || { echo "::error::secret SUPABASE_DB_URL non configurato"; missing=1; }
+          [ -n "$BACKUP_PASSPHRASE" ] || { echo "::error::secret BACKUP_PASSPHRASE non configurato — il backup NON verrà eseguito in chiaro su un repo pubblico"; missing=1; }
+          # una passphrase corta rende la cifratura decorativa
+          if [ -n "$BACKUP_PASSPHRASE" ] && [ "${#BACKUP_PASSPHRASE}" -lt 20 ]; then
+            echo "::error::BACKUP_PASSPHRASE troppo corta (${#BACKUP_PASSPHRASE} caratteri, minimo 20)"
+            missing=1
+          fi
+          exit $missing
+
+      # Il client di pg_dump deve essere >= alla versione del server, altrimenti esce
+      # con "server version mismatch" senza produrre nulla. Supabase gira Postgres 17;
+      # i runner Ubuntu hanno il 16, quindi serve il repo PGDG.
+      - name: Installa postgresql-client 17
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo tee /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc > /dev/null
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
+            https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-17
+          pg_dump --version
+
+      - name: Dump, compressione e cifratura
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          set -o pipefail   # senza, un pg_dump fallito passerebbe inosservato: gzip e gpg riuscirebbero comunque
+          ts="$(date -u +%Y%m%d-%H%M%S)"
+          echo "STAMP=$ts" >> "$GITHUB_ENV"
+          # --no-owner/--no-acl: il dump deve poter essere ripristinato su un'istanza
+          # locale, dove i ruoli di Supabase non esistono.
+          pg_dump "$SUPABASE_DB_URL" \
+            --no-owner --no-acl \
+            --exclude-schema='extensions|graphql|graphql_public|pgbouncer|realtime|_realtime|supabase_functions|vault' \
+            | gzip -9 \
+            | gpg --batch --yes --symmetric --cipher-algo AES256 \
+                  --passphrase-fd 3 --output "gym-db-${ts}.sql.gz.gpg" \
+                  3<<< "$BACKUP_PASSPHRASE"
+          ls -lh "gym-db-${ts}.sql.gz.gpg"
+
+      # Un dump che non si riapre non è un backup. Si decifra e si verifica il
+      # contenuto: così il test copre anche il fatto che la passphrase funzioni.
+      - name: Verifica decifrando
+        env:
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          set -o pipefail
+          f="gym-db-${STAMP}.sql.gz.gpg"
+          gpg --batch --quiet --decrypt --passphrase-fd 3 "$f" 3<<< "$BACKUP_PASSPHRASE" \
+            > plain.sql.gz
+          gzip -t plain.sql.gz || { echo "::error::archivio gzip corrotto dopo la decifratura"; exit 1; }
+          size=$(stat -c%s plain.sql.gz)
+          [ "$size" -gt 10240 ] || { echo "::error::dump troppo piccolo ($size byte)"; exit 1; }
+          missing=0
+          for t in profiles classes bookings workouts workout_templates exercises workout_sessions subscriptions; do
+            if zgrep -q "CREATE TABLE public.$t" plain.sql.gz; then
+              echo "  ✓ $t"
+            else
+              echo "::error::tabella mancante nel dump: $t"; missing=1
+            fi
+          done
+          [ "$missing" -eq 0 ]
+          echo "Blocchi COPY nel dump: $(zgrep -c '^COPY ' plain.sql.gz)"
+          # il file in chiaro non deve sopravvivere allo step: l'upload prende solo il .gpg
+          shred -u plain.sql.gz
+
+      - name: Carica l'artifact cifrato
+        uses: actions/upload-artifact@v4
+        with:
+          name: gym-db-${{ env.STAMP }}
+          path: gym-db-${{ env.STAMP }}.sql.gz.gpg
+          retention-days: ${{ inputs.retention_days || 30 }}
+          if-no-files-found: error

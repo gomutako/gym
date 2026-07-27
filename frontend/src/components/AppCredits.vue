@@ -23,6 +23,10 @@ const libraries = [
   { name: 'Tailwind CSS', url: 'https://tailwindcss.com' },
   { name: 'Supabase JS', url: 'https://supabase.com' },
   { name: 'Capacitor', url: 'https://capacitorjs.com' },
+  // Il runtime di Workbox viene SERVITO al browser (dist/workbox-*.js), non solo
+  // usato durante la build: è codice di terzi distribuito con l'app, quindi
+  // l'avviso di copyright MIT lo riguarda davvero.
+  { name: 'Workbox', url: 'https://developer.chrome.com/docs/workbox' },
 ];
 </script>
 

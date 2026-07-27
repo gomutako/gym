@@ -6,6 +6,62 @@ versionamento [SemVer](https://semver.org/lang/it/).
 
 ## [Non rilasciato]
 
+## [2.0.0] — 2026-07-27
+
+Migrazione da EC2 a un'architettura senza server: l'app è statica su Cloudflare e parla
+direttamente con Supabase. Il costo infrastrutturale passa da ~10-12 €/mese a zero.
+
+### Modificato in modo incompatibile
+
+- **Eliminato il backend Fastify** (`backend/`, 1671 righe) insieme a `deploy/`,
+  `terraform/`, il deploy via SSH e `lib/api.js`. Le sue 11 rotte erano per il 90% wrapper
+  CRUD che duplicavano policy RLS già esistenti. La logica che serviva davvero è passata al
+  database (trigger) o al client, dove leggeva solo dati già coperti dalla RLS.
+- **Bundle id iOS** da `local.gym.app` a `it.pallade.app`, prima di qualsiasi pubblicazione:
+  dopo il primo rilascio su App Store non sarebbe più modificabile. Le installazioni col
+  vecchio id vanno rifatte.
+- `VITE_API_BASE_URL` non esiste più: l'unico servizio da configurare è Supabase.
+
+### Sicurezza
+
+- **Chiusa un'escalation di privilegio sfruttabile**: `profiles_update_self` non limitava le
+  colonne, quindi un member poteva chiamare PostgREST con la anon key e promuoversi ad
+  admin, o allungarsi l'abbonamento. Il backend non proteggeva nulla perché non era sulla
+  strada obbligata.
+- Un trainer non può più modificare o eliminare le schede create da altri trainer.
+- Guard trigger per i limiti di colonna che le policy non esprimono; validazione di forma di
+  `days_json` e `exercises_log`, prima affidata ai soli schemi JSON di Fastify.
+- Revocati a `anon` i privilegi di tabella non necessari.
+
+### Corretto
+
+- **Race sulla capacità dei corsi**: il backend contava le prenotazioni e poi inseriva, senza
+  lock, quindi due richieste sull'ultimo posto passavano entrambe. Ora un trigger conta con
+  `for update`.
+- L'esclusività della scheda "in uso" è del database: un solo update invece di due, senza
+  race sull'indice unico.
+- **Reset password dall'app iOS**: il link puntava a `capacitor://localhost`, che nessun
+  client di posta su iOS apre. Ora il template usa `SiteURL` + `TokenHash` e la pagina
+  scambia il token con `verifyOtp()`.
+
+### Aggiunto
+
+- Livello dati in `frontend/src/lib/data/`, un modulo per risorsa, progettato per essere
+  eseguibile da node: gli e2e usa-e-getta esercitano il codice vero dell'app.
+- Edge Function `admin-users`, unico codice con la service_role key, per il cambio email.
+- `profiles.email` mantenuta dai trigger: elimina il motivo per cui esistevano
+  `/api/users` e `/api/members`.
+- Universal link (`applinks:pallade.it`) per far aprire all'app i link del reset password.
+- Il badge diagnostico admin sorveglia schema, Edge Function e Storage — i tre guasti che
+  non danno errori. In particolare rileva il disallineamento fra migrazioni e codice, che
+  altrimenti si manifesta come un dato che "non si salva".
+- Workflow `DB migrate` e `DB backup` (con cifratura GPG obbligatoria: il repo è pubblico).
+
+### Infrastruttura
+
+- Dominio **pallade.it** su Cloudflare, Supabase Cloud per i dati, Resend per la posta.
+- EC2 terminata ed Elastic IP rilasciato.
+
 ## [1.5.0] — 2026-07-27
 
 Nuova identità visiva — rosa antico dal primario alle icone — e navigazione nativa

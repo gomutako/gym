@@ -1,245 +1,227 @@
-# Deploy su EC2 + Supabase Cloud
+# Deploy — Cloudflare Pages + Supabase + Resend
 
-Guida per pubblicare Gym Manager con **EC2 free tier** (solo app) e **Supabase Cloud free tier**
-(database, Auth, Storage). Backend Fastify, frontend statico (PWA), HTTPS automatico via Caddy.
+Pallade non ha un server applicativo. Tre servizi gestiti, tutti sul piano gratuito:
 
+```text
+pallade.it                → Cloudflare Pages          SPA statica + .well-known/
+<ref>.supabase.co         → Supabase Cloud            Postgres + RLS, Auth, Storage,
+                                                       Edge Function admin-users
+send.pallade.it           → Resend                    SMTP di Supabase Auth
+GitHub Actions            → DB migrate, DB backup     migrazioni e pg_dump schedulato
+app iOS (Capacitor)       → bundle statico            parla diretto a Supabase
 ```
-Internet ──HTTPS──▶ Caddy ── app.tuodominio.com ─▶ dist/ (SPA)  +  /api ─▶ Fastify :3000
-                                     │
-   browser + backend ────HTTPS───────┴────────────▶ https://<ref>.supabase.co  (Supabase Cloud)
-```
 
-**Perché così:** l'istanza ospita solo backend e file statici, quindi basta una `t3.micro`
-(free tier AWS). Il DB pesante sta su Supabase Cloud, anch'esso free tier.
+Non c'è nulla da amministrare via SSH: nessuna istanza, nessun reverse proxy, nessun
+processo da riavviare. Il codice va in produzione con un `git push`; le migrazioni con un
+workflow che si lancia a mano.
 
-> **Ambienti:** in **locale** si usa Supabase via CLI/Docker (`npm run db:start`),
-> in **produzione** Supabase Cloud. Cambiano solo i file `.env` — il codice è identico.
+> **Storia**: fino al 2026-07-27 il progetto girava su EC2 con Caddy e un backend Fastify
+> (`backend/`, `deploy/`, `terraform/`, ora eliminati). Il perché e il come della migrazione
+> stanno in `docs/superpowers/plans/2026-07-27-migrazione-cloudflare-supabase.md`.
 
-## 0. Dimensionamento
+---
 
-| Istanza | RAM | Note |
-|---|---|---|
-| **t3.micro** | 1 GB | ✅ free tier AWS (750 h/mese per 12 mesi), con 2 GB di swap |
-| t3.small | 2 GB | build più veloci, ma fuori free tier |
+## 1. Supabase Cloud
 
-Disco 10 GB gp3 (il free tier include 30 GB). Security group: **22, 80, 443**.
+Progetto: ref `nayiujdfvevccoluqwic`, region `eu-west-1`, Postgres 17.
 
-**Hostname senza dominio proprio.** Let's Encrypt non emette certificati per IP nudi, e
-l'app richiede HTTPS (il service worker della PWA e `crypto.randomUUID()` usato per gli
-upload funzionano solo in *secure context*). Soluzione senza acquistare nulla: **sslip.io**,
-che risolve `<IP-con-trattini>.sslip.io` al tuo IP — Caddy ottiene così un certificato valido.
+**Project Settings → API** — da qui si prendono:
 
-```
-Elastic IP 52.30.1.2  ->  https://52-30-1-2.sslip.io
-```
-Nessun record DNS da creare. Con un dominio vero, sostituisci l'hostname nel `Caddyfile`
-e nei due `.env`, e crea un record A verso l'IP.
+- **Project URL** → `VITE_SUPABASE_URL`
+- **anon / publishable key** → `VITE_SUPABASE_ANON_KEY`. È **pubblica per costruzione**:
+  finisce nel bundle. Ciò che protegge i dati è la RLS, non la segretezza di questa chiave.
+- **service_role key** → **mai** nel frontend. La usano solo il seed, gli script di
+  manutenzione (da `.env.production` alla root, gitignorato) e la Edge Function, dove
+  Supabase la inietta da sé.
 
-## 1. Progetto Supabase Cloud
+**Authentication → URL Configuration**
 
-1. Crea un progetto su [supabase.com](https://supabase.com) (piano **Free**), scegli una region vicina.
-2. **Project Settings → API**: prendi nota di
-   - **Project URL** → `https://<ref>.supabase.co`
-   - **anon public** key → frontend e backend
-   - **service_role** key → **solo backend** (bypassa la RLS, mai nel browser)
-3. **Authentication → Providers → Email**: disattiva *Confirm email*
-   (l'app fa login subito dopo la registrazione; in alternativa configura l'SMTP).
-4. **Authentication → URL Configuration**:
-   - `Site URL` = `https://app.tuodominio.com`
-   - **Redirect URLs**: aggiungi `https://app.tuodominio.com/reset-password`
-     (senza questo il link di recupero password viene rifiutato).
+- `Site URL` = `https://pallade.it` — non è cosmetico: è la base con cui i template email
+  costruiscono i link. Puntarla a un host che non serve l'app rompe il reset password.
+- **Redirect URLs**: `https://pallade.it/**` **e** `capacitor://localhost/**`. Senza il
+  secondo, i redirect dentro l'app iOS vengono rifiutati.
 
-### Recupero password + SMTP (produzione)
-
-Il recupero password (Supabase `resetPasswordForEmail` → pagina `/reset-password`)
-**richiede l'invio email**. In locale gli invii finiscono in Mailpit (`:54324`),
-in produzione serve un SMTP vero: quello di default di Supabase è fortemente
-rate-limitato e finisce in spam.
-
-Le email le invia **Supabase Cloud**, non l'EC2: basta puntargli un relay SMTP.
-⚠️ **Non** installare un mailserver sull'EC2 (porta 25 bloccata da AWS, IP in blocklist,
-deliverability pessima). Usa un servizio gestito.
-
-Provider: essendo su AWS, **Amazon SES** è la scelta naturale (vedi sotto). In alternativa
-**Resend** (free tier ampio, setup più rapido). Cambiano solo host/credenziali.
-
-**Opzione A — Amazon SES (AWS-native):**
-1. **SES → Verified identities**: verifica il dominio (record **DKIM**/SPF nel DNS; con Route 53 è automatico).
-2. Esci dalla **sandbox**: *Request production access* (altrimenti invii solo a indirizzi verificati).
-3. **SES → SMTP settings → Create SMTP credentials** (username/password dedicati, diversi dalle chiavi AWS).
-4. In Supabase (passo 3 sotto): Host `email-smtp.<regione>.amazonaws.com` · Port `587` · le credenziali SMTP SES.
-
-**Opzione B — Resend:**
-
-1. Crea un account su [resend.com](https://resend.com) e **verifica il dominio**
-   (aggiungi i record **SPF** e **DKIM** che Resend indica al tuo DNS — 10 min).
-   Senza dominio verificato le email vanno in spam o non partono.
-2. Genera una **API key**.
-3. Supabase Cloud → **Project Settings → Authentication → SMTP Settings** → *Enable custom SMTP*:
-   - Host: `smtp.resend.com` · Port: `587`
-   - Username: `resend` · Password: la **API key**
-   - Sender email: `noreply@tuodominio.com` (dominio verificato) · Sender name: `Gym Manager`
-4. **Authentication → Email Templates**: incolla i template italiani da `supabase/templates/`
-   (subject nei rispettivi blocchi di `supabase/config.toml`):
-   - *Reset Password* → [`recovery.html`](supabase/templates/recovery.html)
-   - *Confirm signup* → [`confirmation.html`](supabase/templates/confirmation.html) (serve solo se attivi la conferma email)
-   - *Change email address* → [`email_change.html`](supabase/templates/email_change.html)
-5. (Opzionale) alza il rate limit email in **Authentication → Rate Limits**.
-
-> Le credenziali SMTP vivono **nel dashboard Supabase Cloud**, non nel repo:
-> non finiscono in nessun `.env` dell'app. Il reset non tocca il backend Fastify.
+**Authentication → Rate Limits**: alzare il limite di invio email. È indipendente da
+Resend: al valore di default i reset password vengono throttled anche con un SMTP capace.
 
 ### Schema del database
-Le migration in `supabase/migrations/` creano tabelle, RLS, il bucket `exercise-images`
-e le policy Storage. Applicale al progetto remoto con la Supabase CLI:
+
+Le migrazioni in `supabase/migrations/` sono la fonte di verità. **Non si applicano col
+deploy del codice**: vanno applicate prima, con uno di questi modi.
 
 ```bash
-npx supabase login                        # una tantum
-npx supabase link --project-ref <REF>     # REF: Project Settings → General
-./deploy/db-push.sh                       # esegue supabase db push
+# 1. Workflow GitHub "DB migrate" (consigliato: non dipende dalla rete locale)
+#    Actions → DB migrate → Run workflow, prima con dry_run=true
+
+# 2. Da locale, con la connection string del Session pooler
+export SUPABASE_DB_URL="postgresql://postgres.<ref>:<pwd>@aws-0-eu-west-1.pooler.supabase.com:5432/postgres"
+npm run db:push:dry
+npm run db:push
+
+# 3. SQL Editor del dashboard, solo come ripiego d'emergenza:
+#    incollare l'SQL e poi registrare la versione a mano
+#    insert into supabase_migrations.schema_migrations (version) values ('<timestamp>');
 ```
-La CLI tiene traccia delle migration già applicate: rieseguirlo è sicuro.
 
-## 2. Istanza EC2
+⚠️ **Da WSL l'host diretto `db.<ref>.supabase.co` non è raggiungibile**: pubblica solo
+record AAAA (IPv6). Serve il **Session pooler**, che ha IPv4.
 
-Con Terraform (consigliato) oppure con lo script AWS CLI:
+⚠️ **Ordine obbligato: migrazione prima del codice.** Al contrario il sintomo è silenzioso —
+un client vecchio non conosce la colonna nuova, il dato non viene salvato e nessuno segnala
+un errore.
+
+### Edge Function
 
 ```bash
-# Terraform
-cd terraform && cp terraform.tfvars.example terraform.tfvars   # key_name, repo_url
-terraform init && terraform apply
-
-# ...oppure AWS CLI
-KEY_NAME=la-mia-keypair REPO_URL=https://github.com/tuo-utente/gym.git \
-  ./deploy/provision-ec2.sh
+npx supabase functions deploy admin-users
 ```
 
-Entrambi usano `deploy/cloud-init.sh`, che al primo avvio installa **swap, Node 20, git,
-postgresql-client e Caddy**, crea l'utente `gym` e clona il repo in `/opt/gym` (2-3 min).
-Niente Docker: sul server non gira alcun database.
-
-<details>
-<summary>Installazione manuale (se non usi il provisioning automatico)</summary>
+È l'unico codice con privilegi di servizio: cambia l'email di un utente (che vive in
+`auth.users`, fuori dalla portata della anon key). Verifica dopo il deploy che la whitelist
+CORS includa l'origine dell'app iOS:
 
 ```bash
-sudo apt update && sudo apt -y upgrade
-sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile
-sudo mkswap /swapfile && sudo swapon /swapfile
-echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
-
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-sudo apt -y install nodejs git postgresql-client
-
-sudo apt -y install debian-keyring debian-archive-keyring apt-transport-https curl
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
-sudo apt update && sudo apt -y install caddy
-
-sudo useradd -r -m -d /opt/gym gym
-sudo git clone <URL-del-repo> /opt/gym && sudo chown -R gym:gym /opt/gym
+curl -sD - -o /dev/null -X OPTIONS \
+  https://nayiujdfvevccoluqwic.supabase.co/functions/v1/admin-users \
+  -H 'Origin: capacitor://localhost' | grep -i access-control-allow-origin
 ```
-</details>
 
-## 3. App: backend + frontend
+Se l'header manca, l'origine non è ammessa: si aggiusta col secret `ALLOWED_ORIGINS`
+(lista separata da virgole) senza ridistribuire la funzione.
+
+---
+
+## 2. Cloudflare Pages
+
+Progetto Pages collegato al repo GitHub, branch `master`:
+
+| Impostazione | Valore |
+| --- | --- |
+| Build command | `npm install && npm run build --workspace frontend` |
+| Build output directory | `frontend/dist` |
+| Node version | `22` |
+| Variabili | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` |
+
+Le variabili `VITE_*_SIM` **non** vanno su Pages: servono solo alla build locale per il
+simulatore iOS.
+
+Custom domain `pallade.it` (+ `www` in redirect). Il certificato lo gestisce Cloudflare.
+
+⚠️ **Nessun record DNS di `pallade.it` deve puntare altrove.** Se punta a un'origine che non
+sa servire TLS per quel nome, Cloudflare risponde **525** (handshake fallito). Un 522/523
+significherebbe invece origine irraggiungibile.
+
+Il **fallback della SPA** lo dichiara `wrangler.jsonc`:
+
+```jsonc
+"assets": { "not_found_handling": "single-page-application" }
+```
+
+Senza, ogni deep link risponderebbe 404 — Cloudflare cerca un file con quel path, mentre le
+rotte le risolve il router Vue. Riguarda anche il link del reset password.
+
+⚠️ **Non usare un file `_redirects` con `/* /index.html 200`**: con i Worker ad asset statici
+`/index.html` viene normalizzato a `/`, che rientra in `/*` e riparte. Cloudflare lo rileva e
+**rifiuta il deploy** con `Infinite loop detected in this rule [code: 100324]` — dopo aver
+caricato gli asset, quindi il fallimento arriva a build già riuscita.
+
+**`frontend/public/_headers`** invece serve, e viene letto: forza `application/json` su
+`.well-known/apple-app-site-association` (non ha estensione, altrimenti verrebbe servito come
+octet-stream e iOS lo ignorerebbe) e impedisce la cache di `sw.js`/`index.html`, perché il
+plugin PWA è in `registerType: autoUpdate` e un service worker servito da cache tiene
+l'utente su una versione vecchia anche dopo un deploy riuscito.
+
+---
+
+## 3. Resend (posta di Supabase Auth)
+
+1. Verifica del dominio su **`send.pallade.it`**, non su `pallade.it`: così gli MX del
+   dominio radice restano liberi per eventuali caselle vere.
+2. Record **SPF** e **DKIM** indicati da Resend, più un **DMARC** su `pallade.it`.
+3. Supabase → **Project Settings → Authentication → SMTP Settings** → *Enable custom SMTP*:
+   host `smtp.resend.com`, porta `587`, username `resend`, password = API key,
+   sender `noreply@pallade.it`.
+4. **Authentication → Email Templates**: incollare i template italiani da
+   `supabase/templates/` (in locale li carica `config.toml`, in produzione no):
+   - *Reset Password* → [`recovery.html`](supabase/templates/recovery.html)
+   - *Confirm signup* → [`confirmation.html`](supabase/templates/confirmation.html)
+   - *Change email address* → [`email_change.html`](supabase/templates/email_change.html)
+
+⚠️ Il template di reset costruisce il link con `{{ .SiteURL }}` e `{{ .TokenHash }}`, **non**
+con `{{ .ConfirmationURL }}`. Quest'ultimo rimbalza sul `redirectTo` del client, che dentro
+l'app iOS è `capacitor://localhost`: uno schema che nessun client di posta su iOS apre,
+lasciando l'utente bloccato. La pagina `/reset-password` scambia il token con `verifyOtp()`.
+
+---
+
+## 4. Backup
+
+Il piano **Free di Supabase non include backup automatici**. Ci pensa il workflow
+**DB backup** (`.github/workflows/db-backup.yml`): ogni giorno alle 03:17 UTC fa
+`pg_dump` → `gzip` → **cifratura GPG AES-256**, verifica il risultato **decifrandolo** (un
+dump che non si riapre non è un backup, e così il test copre anche la passphrase) e lo carica
+come artifact con 30 giorni di conservazione.
+
+Secret richiesti: `SUPABASE_DB_URL` (lo stesso di *DB migrate*) e `BACKUP_PASSPHRASE`.
+
+🔒 **La cifratura non è opzionale, ed è il motivo per cui il job si rifiuta di partire senza
+passphrase.** Questo repository è **pubblico**, e sui repo pubblici gli artifact di Actions
+sono scaricabili da chiunque veda il repo. Il dump contiene i dati personali dei clienti
+(nome, email, telefono, data di nascita, peso, note del trainer): caricarlo in chiaro
+equivarrebbe a pubblicarli. Il workflow controlla anche che la passphrase sia lunga almeno
+20 caratteri, perché altrimenti la cifratura è decorativa.
+
+⚠️ Conserva `BACKUP_PASSPHRASE` **anche fuori da GitHub** (password manager): senza, gli
+archivi sono irrecuperabili.
+
+Ripristino su un'istanza locale:
 
 ```bash
-cd /opt/gym
-npm install
-
-# Backend — chiavi dal dashboard Supabase Cloud
-cp backend/.env.production.example backend/.env
-#   SUPABASE_URL=https://<ref>.supabase.co
-#   SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY / CORS_ORIGIN
-sudo cp deploy/gym-backend.service /etc/systemd/system/
-sudo systemctl daemon-reload && sudo systemctl enable --now gym-backend
-systemctl status gym-backend      # deve essere "active (running)"
-
-# Frontend (build di produzione)
-cp frontend/.env.production.example frontend/.env.production
-#   VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY / VITE_API_BASE_URL
-#   (le VITE_*_SIM servono solo alla build iOS per il simulatore: sull'EC2
-#    sono innocue, il web usa sempre la terna senza suffisso)
-npm run build --workspace frontend    # genera frontend/dist (con PWA)
+gpg --decrypt --batch --passphrase '<BACKUP_PASSPHRASE>' gym-db-<stamp>.sql.gz.gpg \
+  | gunzip \
+  | docker exec -i supabase_db_gym psql -U postgres -d postgres
 ```
 
-> **App iOS (Capacitor) e CORS.** L'app iOS incorpora la SPA in una WKWebView con
-> `iosScheme: 'capacitor'` (vedi `capacitor.config.ts`), quindi la sua origine non è
-> `https://app.tuodominio.com` ma **`capacitor://localhost`** — un'origine non-http(s)
-> distinta da quella dell'app web. Il login funziona comunque (va diretto a Supabase,
-> non passa dal CORS del backend), ma **ogni chiamata `/api/*`** dall'app iOS verrebbe
-> bloccata dal CORS se `capacitor://localhost` non è in `CORS_ORIGIN`. Aggiungilo come
-> origine aggiuntiva separata da virgola, es.
-> `CORS_ORIGIN=https://app.tuodominio.com,capacitor://localhost`
-> (già impostato di default in `backend/.env.production.example`).
+---
 
-## 4. Caddy (HTTPS automatico)
+## 5. Checklist di rilascio
 
 ```bash
-sudo cp /opt/gym/deploy/Caddyfile /etc/caddy/Caddyfile
-sudo nano /etc/caddy/Caddyfile        # metti il tuo dominio reale
-sudo systemctl reload caddy
-```
-Caddy ottiene i certificati Let's Encrypt da solo al primo accesso HTTPS.
+# 1. migrazioni PRIMA del codice
+#    Actions → DB migrate (dry_run=true, poi false)
 
-## 5. Primo amministratore
+# 2. Edge Function, se è cambiata
+npx supabase functions deploy admin-users
 
-Registrati dall'app (diventi `member`), poi promuoviti ad admin — dal **SQL Editor**
-del dashboard oppure via script:
-```bash
-DATABASE_URL="postgresql://postgres:PWD@db.<ref>.supabase.co:5432/postgres" \
-  ./deploy/make-admin.sh tua@email.com
-```
+# 3. codice: il push fa partire la build di Pages
+git push origin master
 
-## 6. Verifiche
-- `https://app.tuodominio.com` carica l'app e su mobile compare **"Aggiungi a Home"** (PWA)
-- Login/registrazione funzionano (Auth cloud)
-- Le immagini degli esercizi si caricano (Storage/bucket)
-- `https://app.tuodominio.com/api/health` → `{"status":"ok"}`
-
-## Aggiornamenti & manutenzione
-- **Aggiornare a mano:** `cd /opt/gym && ./deploy/deploy.sh`
-- **Nuove migration:** `./deploy/db-push.sh` dalla tua macchina (il deploy dell'app NON le esegue)
-- **Backup DB:** il piano Free di Supabase non include backup automatici, quindi conviene farli:
-  ```bash
-  # manuale
-  DATABASE_URL="postgresql://postgres:PWD@db.<ref>.supabase.co:5432/postgres" ./deploy/backup-db.sh
-
-  # automatico giornaliero sull'EC2
-  echo 'DATABASE_URL=postgresql://postgres:PWD@db.<ref>.supabase.co:5432/postgres' \
-    | sudo tee /etc/gym-backup.env && sudo chmod 600 /etc/gym-backup.env
-  sudo cp /opt/gym/deploy/gym-backup.{service,timer} /etc/systemd/system/
-  sudo systemctl daemon-reload && sudo systemctl enable --now gym-backup.timer
-  systemctl list-timers gym-backup.timer
-  ```
-- **Log backend:** `journalctl -u gym-backend -f`
-
-> ⚠️ **Free tier Supabase:** i progetti inattivi per ~1 settimana vengono messi in pausa
-> (si riattivano dal dashboard). Tienilo presente per ambienti dimostrativi.
-
-## 7. Deploy automatico (opzionale)
-
-Sono inclusi:
-- `deploy/deploy.sh` — script on-server: `git reset --hard`, `npm install`, build frontend, restart backend
-- `.github/workflows/deploy.yml` — GitHub Action: builda (gate) e poi esegue lo script via SSH ad ogni push su `master` (produzione, git flow)
-
-Prerequisito sul server (già impostato dal cloud-init) perché il restart avvenga senza password:
-```bash
-echo 'gym ALL=(ALL) NOPASSWD: /bin/systemctl restart gym-backend' | sudo tee /etc/sudoers.d/gym-deploy
+# 4. app iOS (serve un Mac)
+npm run build && npx cap sync ios
+xcodebuild -workspace frontend/ios/App/App.xcworkspace -scheme App \
+  -configuration Debug -destination 'id=<UDID>' -allowProvisioningUpdates build
 ```
 
-Chiave SSH per la CI (esegui in locale, aggiungi la pubblica al server):
-```bash
-ssh-keygen -t ed25519 -f deploy_key -N ""            # crea deploy_key / deploy_key.pub
-ssh-copy-id -i deploy_key.pub gym@IP_DEL_SERVER      # o incolla in ~gym/.ssh/authorized_keys
-```
+Verifiche dopo il rilascio:
 
-Su GitHub → **Settings → Secrets and variables → Actions**, crea:
-| Secret | Valore |
-|---|---|
-| `DEPLOY_HOST` | IP pubblico o dominio dell'EC2 |
-| `DEPLOY_USER` | `gym` |
-| `DEPLOY_SSH_KEY` | contenuto di `deploy_key` (chiave **privata**) |
-| `DEPLOY_PORT` | (opzionale) porta SSH se diversa da 22 |
+- `https://pallade.it` carica l'app, e un deep link diretto (es. `/allenamento`) **non** dà 404
+- login, e una lettura che passa dalla RLS (catalogo esercizi)
+- reset password: l'email arriva da `noreply@pallade.it` e il link riporta all'app
+- dalla vista admin: cambio email di un utente (esercita la Edge Function)
+- creare una scheda **come trainer**, non come admin: è il caso in cui `trainer_id` deve
+  combaciare con `auth.uid()`, e un admin non lo verificherebbe
 
-Da qui in poi ogni `git push` su `master` (nel git flow: una release/hotfix)
-builda e rilascia in automatico — oppure lancialo a mano da **Actions → Deploy → Run workflow**.
+---
+
+## 6. Prima di aprire al mondo
+
+- **Supabase Pro ($25/mese)**: il piano Free non fa backup automatici e **mette in pausa il
+  progetto dopo una settimana di inattività**. Con clienti veri è il minimo. In regalo
+  arrivano le image transformations, e il custom domain diventa un add-on da $10.
+- **Cancellazione account in-app**: l'App Store la **richiede** per ogni app che permette di
+  registrarsi (linea guida 5.1.1(v)). Serve una Edge Function con `auth.admin.deleteUser`
+  più la pulizia dei dati collegati.
+- **Privacy policy e termini** su `pallade.it`: l'URL della privacy è obbligatorio in App
+  Store Connect.
+- **HealthKit**: usage description esplicite in `Info.plist`, una delle cause di rifiuto più
+  comuni.

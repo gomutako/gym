@@ -1,8 +1,14 @@
 <script setup>
 // Calendario/lista corsi con prenotazione e annullamento.
-// Usa il backend Fastify (che applica capacità e anti-doppione).
+// Capacità e anti-doppione li applica il DATABASE (trigger
+// bookings_enforce_capacity + vincolo unique), non più il backend.
 import { ref, onMounted, computed } from 'vue';
-import { api } from '@/lib/api';
+import { storeToRefs } from 'pinia';
+import { useAuthStore } from '@/stores/auth';
+import { listClasses } from '@/lib/data/classes';
+import { listOwnBookings, bookClass, cancelBooking } from '@/lib/data/bookings';
+
+const { user } = storeToRefs(useAuthStore());
 
 const classes = ref([]);
 const myBookings = ref([]); // [{ id, classes: {...} }]
@@ -29,8 +35,8 @@ async function load() {
   loading.value = true;
   try {
     [classes.value, myBookings.value] = await Promise.all([
-      api.get('/api/classes'),
-      api.get('/api/bookings'),
+      listClasses(),
+      listOwnBookings(user.value.id),
     ]);
   } catch (e) {
     error.value = e.message;
@@ -43,7 +49,7 @@ async function book(classId) {
   error.value = '';
   busyId.value = classId;
   try {
-    await api.post('/api/bookings', { class_id: classId });
+    await bookClass(classId, user.value.id);
     await load();
   } catch (e) {
     error.value = e.message; // es. "Corso al completo"
@@ -56,7 +62,7 @@ async function cancel(classId) {
   error.value = '';
   busyId.value = classId;
   try {
-    await api.del(`/api/bookings/${bookedMap.value[classId]}`);
+    await cancelBooking(bookedMap.value[classId]);
     await load();
   } catch (e) {
     error.value = e.message;

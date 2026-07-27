@@ -11,6 +11,7 @@
 // =====================================================
 import { createClient } from '@supabase/supabase-js';
 import { getRuntimeConfig } from './runtime-config';
+import { setDataClient } from './data/client.js';
 
 export let supabase = null;
 
@@ -31,6 +32,11 @@ export function initSupabase() {
       autoRefreshToken: true, // rinnova il token in automatico
     },
   });
+
+  // Registra il client per i moduli di lib/data/, che non possono importarlo
+  // da qui: dipenderebbero da runtime-config (import.meta.env, solo Vite) e
+  // non sarebbero più esercitabili dagli script e2e in node.
+  setDataClient(supabase);
 
   return supabase;
 }

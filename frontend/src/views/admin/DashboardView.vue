@@ -1,7 +1,7 @@
 <script setup>
 // Dashboard Admin: statistiche sintetiche + report presenze per corso.
 import { ref, onMounted } from 'vue';
-import { api } from '@/lib/api';
+import { getAttendanceReport } from '@/lib/data/reports';
 import IdentityCard from '@/components/IdentityCard.vue';
 import ServiceStatusBadge from '@/components/ServiceStatusBadge.vue';
 
@@ -17,7 +17,7 @@ function formatDate(iso) {
 
 onMounted(async () => {
   try {
-    report.value = await api.get('/api/reports/attendance');
+    report.value = await getAttendanceReport();
   } catch (e) {
     error.value = e.message;
   } finally {

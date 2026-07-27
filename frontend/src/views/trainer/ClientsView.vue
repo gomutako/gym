@@ -3,7 +3,7 @@
 // Azioni per riga: anagrafica in modale, oppure vai alle sue schede.
 import { ref, computed, watch, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { api } from '@/lib/api';
+import { listMembers } from '@/lib/data/profiles';
 import { avatarUrl } from '@/lib/storage';
 import { computeBmi, bmiCategory, computeAge, GENDER_LABEL } from '@/lib/body';
 import Modal from '@/components/Modal.vue';
@@ -33,7 +33,7 @@ function fmtDate(d) {
 async function load() {
   loading.value = true;
   try {
-    members.value = await api.get('/api/members');
+    members.value = await listMembers();
   } catch (e) {
     error.value = e.message;
   } finally {

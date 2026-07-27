@@ -156,7 +156,10 @@ max_indexes = 5
 enabled = true
 # The base URL of your website. Used as an allow-list for redirects and for constructing URLs used
 # in emails.
-site_url = "http://127.0.0.1:3000"
+# In locale il frontend Vite gira su :5173 — è da lì che si apre la pagina di
+# reset password, e SiteURL è la base con cui il template dell'email costruisce
+# il link. In produzione va impostato a https://pallade.it nel dashboard.
+site_url = "http://localhost:5173"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
@@ -241,15 +244,15 @@ otp_expiry = 3600
 # Template email personalizzati (italiano). In locale li usa Mailpit;
 # in produzione vanno incollati nel dashboard Supabase Cloud.
 [auth.email.template.recovery]
-subject = "Reimposta la tua password — Gym Manager"
+subject = "Reimposta la tua password — Pallade"
 content_path = "./supabase/templates/recovery.html"
 
 [auth.email.template.confirmation]
-subject = "Conferma la tua email — Gym Manager"
+subject = "Conferma la tua email — Pallade"
 content_path = "./supabase/templates/confirmation.html"
 
 [auth.email.template.email_change]
-subject = "Conferma il cambio email — Gym Manager"
+subject = "Conferma il cambio email — Pallade"
 content_path = "./supabase/templates/email_change.html"
 
 # SMTP di PRODUZIONE.
@@ -411,7 +414,12 @@ deno_version = 2
 # secret_key = "env(SECRET_VALUE)"
 
 [analytics]
-enabled = true
+# Disabilitato di proposito: su WSL2 i container Logflare/Vector non superano
+# l'healthcheck e bloccano `supabase start` ("container is not ready: unhealthy").
+# Non serve allo sviluppo. Attenzione: un aggiornamento della CLI può
+# rimetterlo a true riscrivendo questo file — se `db:start` inizia a fallire,
+# controllare qui per primo.
+enabled = false
 port = 54327
 # Configure one of the supported backends: `postgres`, `bigquery`.
 backend = "postgres"

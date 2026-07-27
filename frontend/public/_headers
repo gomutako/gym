@@ -1,0 +1,23 @@
+# Cloudflare Pages — header per path.
+
+# Il file degli universal link non ha estensione: senza questa riga verrebbe
+# servito come octet-stream e iOS lo ignorerebbe. Deve essere application/json.
+/.well-known/apple-app-site-association
+  Content-Type: application/json
+  Cache-Control: public, max-age=3600
+
+# Il service worker e il manifest NON vanno messi in cache a lungo: il plugin PWA
+# è in `registerType: autoUpdate`, e un sw.js servito da cache tiene l'utente su
+# una versione vecchia dell'app anche dopo un deploy riuscito.
+/sw.js
+  Cache-Control: no-cache, no-store, must-revalidate
+/workbox-*.js
+  Cache-Control: no-cache, no-store, must-revalidate
+/manifest.webmanifest
+  Cache-Control: public, max-age=0, must-revalidate
+/index.html
+  Cache-Control: no-cache, no-store, must-revalidate
+
+# Gli asset con hash nel nome sono immutabili: si possono cachare a vita.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable

@@ -32,7 +32,7 @@ export function tabsForRole(role) {
   return [
     HOME,
     { name: 'bookings', label: 'Corsi', icon: 'calendar', symbol: 'calendar' },
-    { name: 'training', label: 'Allena', icon: 'play', symbol: 'play.circle.fill' },
+    { name: 'training', label: 'Allenamenti', icon: 'play', symbol: 'play.circle.fill' },
     PROFILE,
   ];
 }

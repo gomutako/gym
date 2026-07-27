@@ -6,7 +6,9 @@ import { useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
 import { useAuthStore } from '@/stores/auth';
 import { useThemeStore } from '@/stores/theme';
-import { api } from '@/lib/api';
+import { listSubscriptions } from '@/lib/data/subscriptions';
+import { listExercises } from '@/lib/data/exercises';
+import { listWorkoutsForMember, setWorkoutActive, setWorkoutArchived } from '@/lib/data/workouts';
 import { avatarUrl, uploadAvatar } from '@/lib/storage';
 import { subStatus, SUB_STATUS_LABEL, SUB_STATUS_RANK, formatDate } from '@/lib/subscriptions';
 import { computeBmi, bmiCategory, computeAge, GENDER_LABEL } from '@/lib/body';
@@ -152,7 +154,7 @@ watch(subsPageCount, (n) => { if (subsPage.value > n) subsPage.value = n; });
 async function loadSubs() {
   subsLoading.value = true;
   try {
-    subs.value = await api.get(`/api/subscriptions/member/${user.value.id}`);
+    subs.value = await listSubscriptions(user.value.id);
   } catch (e) {
     error.value = e.message;
   } finally {
@@ -185,7 +187,7 @@ async function openSchedaDetail(s) {
   detailScheda.value = s;
   detailOpen.value = true;
   if (!catalog.value.length) {
-    try { catalog.value = await api.get('/api/exercises'); } catch (e) { error.value = e.message; }
+    try { catalog.value = await listExercises(); } catch (e) { error.value = e.message; }
   }
 }
 function toggleSchedaSort(key) {
@@ -221,7 +223,7 @@ async function toggleActive(s) {
   error.value = '';
   const next = !s.is_active;
   try {
-    await api.patch(`/api/workouts/${s.id}/active`, { is_active: next });
+    await setWorkoutActive(s.id, next);
     for (const w of schede.value) w.is_active = next && w.id === s.id;
     if (next) s.archived = false;
   } catch (e) {
@@ -234,7 +236,7 @@ async function toggleArchived(s) {
   error.value = '';
   const next = !s.archived;
   try {
-    await api.patch(`/api/workouts/${s.id}/archived`, { archived: next });
+    await setWorkoutArchived(s.id, next);
     s.archived = next;
     if (next) s.is_active = false; // archiviata ⇒ non più in uso
   } catch (e) {
@@ -254,7 +256,7 @@ watch(schedePageCount, (n) => { if (schedePage.value > n) schedePage.value = n; 
 async function loadSchede() {
   schedeLoading.value = true;
   try {
-    schede.value = await api.get(`/api/workouts/member/${user.value.id}`);
+    schede.value = await listWorkoutsForMember(user.value.id);
   } catch (e) {
     error.value = e.message;
   } finally {

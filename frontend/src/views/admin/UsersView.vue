@@ -2,7 +2,9 @@
 // Admin: gestione utenti — tabella con ricerca e ordinamento; la modifica
 // (ruolo, email, abbonamenti) avviene in un pannello dedicato per utente.
 import { ref, computed, watch, onMounted } from 'vue';
-import { api } from '@/lib/api';
+import { listUsers, updateUserRole } from '@/lib/data/profiles';
+import { updateUserEmail } from '@/lib/data/admin';
+import { listSubscriptions, createSubscription, deleteSubscription } from '@/lib/data/subscriptions';
 import { subStatus, SUB_STATUS_LABEL, formatDate } from '@/lib/subscriptions';
 import Modal from '@/components/Modal.vue';
 import Combobox from '@/components/Combobox.vue';
@@ -43,7 +45,7 @@ function isActive(u) {
 async function load() {
   loading.value = true;
   try {
-    const list = await api.get('/api/users');
+    const list = await listUsers();
     users.value = list.map((u) => ({
       ...u,
       _origEmail: u.email,
@@ -154,10 +156,15 @@ async function save(u) {
   error.value = '';
   savingId.value = u.id;
   try {
-    const payload = { role: u.role };
-    if (u.email && u.email !== u._origEmail) payload.email = u.email.trim();
-    await api.patch(`/api/members/${u.id}`, payload);
-    u._origEmail = u.email;
+    // Due percorsi distinti: il ruolo è una colonna di `profiles` (RLS), l'email
+    // vive in `auth.users` e passa dalla Edge Function con la service_role key.
+    // L'email prima del ruolo: se fallisce (es. indirizzo già usato) non si
+    // resta con il ruolo cambiato e l'anagrafica incoerente.
+    if (u.email && u.email.trim() !== u._origEmail) {
+      await updateUserEmail(u.id, u.email.trim());
+    }
+    await updateUserRole(u.id, u.role);
+    u._origEmail = u.email?.trim() ?? u._origEmail;
     u._saved = true;
     setTimeout(() => (u._saved = false), 1500);
   } catch (e) {
@@ -171,7 +178,7 @@ async function save(u) {
 async function loadSubs(u) {
   u._subsLoading = true;
   try {
-    u._subs = await api.get(`/api/subscriptions/member/${u.id}`);
+    u._subs = await listSubscriptions(u.id);
   } catch (e) {
     error.value = e.message;
   } finally {
@@ -187,7 +194,7 @@ async function addSub(u) {
     return;
   }
   try {
-    await api.post('/api/subscriptions', { member_id: u.id, start_date: u._newStart, end_date: u._newEnd });
+    await createSubscription({ member_id: u.id, start_date: u._newStart, end_date: u._newEnd });
     u._newStart = '';
     u._newEnd = '';
     await loadSubs(u);
@@ -200,7 +207,7 @@ async function addSub(u) {
 async function removeSub(u, sub) {
   if (!confirm('Eliminare questo periodo di abbonamento?')) return;
   try {
-    await api.del(`/api/subscriptions/${sub.id}`);
+    await deleteSubscription(sub.id);
     await loadSubs(u);
     refreshEnd(u);
   } catch (e) {

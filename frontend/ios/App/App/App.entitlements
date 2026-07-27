@@ -10,5 +10,14 @@
 	</array>
 	<key>com.apple.developer.healthkit.background-delivery</key>
 	<true/>
+	<!-- Universal link: fa aprire ALL'APP i link https://pallade.it/… invece di
+	     Safari. Serve al reset password, il cui link arriva per email e deve
+	     riportare l'utente dentro l'app. Richiede che
+	     https://pallade.it/.well-known/apple-app-site-association sia
+	     raggiungibile e che il Team ID lì dentro combaci con questo progetto. -->
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:pallade.it</string>
+	</array>
 </dict>
 </plist>
