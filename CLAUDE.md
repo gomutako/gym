@@ -79,8 +79,13 @@ delle query invece del codice dell'app. Pattern: creare il `.mjs`, eseguirlo, ri
 ### App iOS (Capacitor)
 
 Il progetto Xcode sta in `frontend/ios/App` (workspace `App.xcworkspace`, schema `App`,
-bundle id `local.gym.app`). L'app **incorpora** la SPA: ogni modifica al frontend richiede
-di ricostruire il bundle e risincronizzarlo.
+bundle id **`it.pallade.app`**, Team ID `7M9683Z95M`). L'app **incorpora** la SPA: ogni
+modifica al frontend richiede di ricostruire il bundle e risincronizzarlo.
+
+⚠️ Il bundle id è cambiato da `local.gym.app` il 2026-07-27, **prima** di qualsiasi
+pubblicazione: dopo il primo rilascio su App Store non è più modificabile (sarebbe un'altra
+app, con scheda e utenti da rifare). Conseguenza pratica: le installazioni fatte col vecchio
+id **non ricevono aggiornamenti**, vanno disinstallate e reinstallate.
 
 ```bash
 npm run build                     # produce frontend/dist (usa .env.production)
@@ -91,7 +96,7 @@ xcrun devicectl list devices      # UDID dei device collegati
 xcodebuild -workspace frontend/ios/App/App.xcworkspace -scheme App \
   -configuration Debug -destination 'id=<UDID>' -allowProvisioningUpdates build
 xcrun devicectl device install app --device <UDID> <path>/Debug-iphoneos/App.app
-xcrun devicectl device process launch --device <UDID> --console local.gym.app
+xcrun devicectl device process launch --device <UDID> --console it.pallade.app
 ```
 
 - **`--console` è l'unico modo per leggere i `console.log` JS dal device**: appaiono come
@@ -113,6 +118,31 @@ xcrun devicectl device process launch --device <UDID> --console local.gym.app
   vuote per CORS" è sparita con il backend. Resta un solo punto in cui l'origine conta: la
   **Edge Function** `admin-users`, che ha una whitelist. Verificabile senza toccare il telefono:
   `curl -sD - -o /dev/null -X OPTIONS https://<ref>.supabase.co/functions/v1/admin-users -H 'Origin: capacitor://localhost' | grep -i access-control-allow-origin`
+- **Universal link** (`applinks:pallade.it` in `App.entitlements`): fanno aprire ALL'APP i
+  link `https://pallade.it/…` invece di Safari. Servono al reset password, il cui link
+  arriva per email. Il file di associazione è versionato in
+  `frontend/public/.well-known/apple-app-site-association` (Team ID + bundle id) e
+  `frontend/public/_headers` gli impone `application/json` — senza quel content-type iOS lo
+  ignora in silenzio. Verifica lato server:
+  `curl -sI https://pallade.it/.well-known/apple-app-site-association | grep -i content-type`
+  Lato device si prova solo installando l'app: iOS scarica il file alla prima installazione.
+
+#### Pubblicazione su App Store (non ancora fatta)
+
+Prerequisiti che **bloccano la review** se mancanti, dettagliati nella Fase 6 di
+`docs/superpowers/plans/2026-07-27-migrazione-cloudflare-supabase.md`:
+
+- **Cancellazione account in-app** — obbligatoria per ogni app che permette di registrarsi
+  (linea guida 5.1.1(v)). Richiede una Edge Function con `auth.admin.deleteUser` più la
+  pulizia dei dati collegati: non basta un modulo di richiesta.
+- **Privacy policy** raggiungibile a un URL pubblico su `pallade.it` (campo obbligatorio in
+  App Store Connect) e termini d'uso.
+- **HealthKit**: usage description esplicite in `Info.plist` — è una delle cause di rifiuto
+  più comuni, e l'app chiede frequenza cardiaca e calorie.
+- **Apple Developer Program** ($99/anno): il provisioning free dura 7 giorni e non permette
+  né TestFlight né la pubblicazione.
+- **Supabase Pro** consigliato prima di avere utenti veri: il piano free non fa backup
+  automatici e mette in pausa il progetto dopo una settimana di inattività.
 
 ## Architettura
 
