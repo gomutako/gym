@@ -11,7 +11,11 @@
   //   deploy: npx wrangler deploy
   // Da locale si può fare lo stesso con `npx wrangler deploy` dopo `npm run build`.
   // =====================================================
-  "name": "pallade",
+  // Deve combaciare col nome del progetto su Cloudflare: `wrangler deploy` usa
+  // questo campo per decidere SU QUALE Worker distribuire, e un nome diverso
+  // finirebbe su un Worker separato da quello collegato al repo.
+  // Determina anche il sottodominio *.workers.dev.
+  "name": "gym",
   "compatibility_date": "2026-07-27",
 
   "assets": {
