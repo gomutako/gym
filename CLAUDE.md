@@ -146,8 +146,11 @@ Prerequisiti che **bloccano la review** se mancanti, dettagliati nella Fase 6 di
 - **Cancellazione account in-app** — obbligatoria per ogni app che permette di registrarsi
   (linea guida 5.1.1(v)). Richiede una Edge Function con `auth.admin.deleteUser` più la
   pulizia dei dati collegati: non basta un modulo di richiesta.
-- **Privacy policy** raggiungibile a un URL pubblico su `pallade.it` (campo obbligatorio in
-  App Store Connect) e termini d'uso.
+- ✅ **Privacy policy e termini** — `frontend/public/{privacy,termini}.html` + `legal.css`,
+  pubblicati a `https://pallade.it/privacy.html` e `/termini.html` (il primo è il campo
+  obbligatorio in App Store Connect). Sono file statici, non rotte della SPA: restano
+  leggibili anche se l'app non si carica. Quando arriverà la cancellazione account in-app
+  va aggiornato il §7 della privacy, che oggi indirizza alla richiesta via email.
 - **HealthKit**: usage description esplicite in `Info.plist` — è una delle cause di rifiuto
   più comuni, e l'app chiede frequenza cardiaca e calorie.
 - **Apple Developer Program** ($99/anno): il provisioning free dura 7 giorni e non permette
