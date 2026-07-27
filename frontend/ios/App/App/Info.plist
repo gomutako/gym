@@ -37,18 +37,21 @@
 	<array>
 		<string>armv7</string>
 	</array>
+	<!-- Solo portrait. L'interfaccia è disegnata mobile-first su una colonna e in
+	     orizzontale non guadagna nulla: la tab bar nativa e le safe-area laterali
+	     mangiano spazio, e le viste con tabella (storico, sessione) diventano più
+	     scomode, non meno. Il manifest PWA dichiara già `orientation: portrait`,
+	     quindi questa è la stessa scelta applicata al guscio nativo.
+	     Su iPad resta ammesso anche il portrait capovolto: è il comportamento
+	     atteso su quel formato e non cambia il layout. -->
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
 		<string>UIInterfaceOrientationPortraitUpsideDown</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
