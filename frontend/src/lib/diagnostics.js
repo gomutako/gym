@@ -2,13 +2,19 @@
 // Raccolta dati per il badge diagnostico della dashboard admin.
 // Nessuna UI: solo sonde e normalizzazione del risultato.
 //
-// Le sonde di raggiungibilità partono dal CLIENT di proposito: è il punto di
-// vista che conta, perché il caso da diagnosticare è "questa copia dell'app non
-// raggiunge il servizio", non "il servizio è su" in astratto.
+// Le sonde partono dal CLIENT di proposito: è il punto di vista che conta,
+// perché il caso da diagnosticare è "questa copia dell'app non raggiunge il
+// servizio", non "il servizio è su" in astratto.
+//
+// STORIA: qui c'era anche una sonda del backend Fastify che confrontava la sua
+// versione con quella dell'app. Serviva a rendere visibile uno skew che poteva
+// far sparire i dati in silenzio (un backend vecchio scartava i campi che non
+// conosceva). Eliminato il backend, quella classe di guasti non esiste più: resta
+// un solo servizio da raggiungere, e lo schema del database è allineato dalle
+// migration prima del deploy.
 // =====================================================
 import { supabase } from './supabase';
 import { getRuntimeConfig } from './runtime-config';
-import { authHeader } from './api';
 
 export const SLOW_MS = 1500;
 export const TIMEOUT_MS = 5000;
@@ -19,63 +25,6 @@ function hostOf(url) {
     return new URL(url).host;
   } catch {
     return url || '—';
-  }
-}
-
-/**
- * Sonda del backend: /api/health per la raggiungibilità, poi
- * /api/admin/diagnostics per versione, stato DB e uptime.
- *
- * Il 404 sulla seconda NON è un guasto: significa che il backend è precedente
- * alla versione che ha introdotto la rotta — cioè esattamente il caso che
- * questo badge esiste per rendere visibile.
- */
-async function probeBackend() {
-  const { apiBaseUrl } = getRuntimeConfig();
-  const url = hostOf(apiBaseUrl);
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  const startedAt = performance.now();
-
-  try {
-    const res = await fetch(`${apiBaseUrl}/api/health`, { signal: controller.signal });
-    const latencyMs = Math.round(performance.now() - startedAt);
-    if (!res.ok) {
-      return { url, ok: false, latencyMs, version: null, uptimeS: null, error: `HTTP ${res.status}` };
-    }
-
-    // Raggiungibile: ora chiediamo chi è.
-    let version = null;
-    let uptimeS = null;
-    let error = null;
-    try {
-      const d = await fetch(`${apiBaseUrl}/api/admin/diagnostics`, {
-        headers: await authHeader(),
-        signal: controller.signal,
-      });
-      if (d.status === 404) {
-        error = "backend più vecchio dell'app";
-      } else if (!d.ok) {
-        error = `diagnostica non disponibile (HTTP ${d.status})`;
-      } else {
-        const body = await d.json();
-        version = body.version ?? null;
-        uptimeS = body.uptime_s ?? null;
-        if (body.database && body.database.ok === false) {
-          error = `database non raggiungibile dal backend${body.database.error ? `: ${body.database.error}` : ''}`;
-        }
-      }
-    } catch (e) {
-      error = e.name === 'AbortError' ? 'timeout sulla diagnostica' : e.message;
-    }
-
-    return { url, ok: true, latencyMs, version, uptimeS, error };
-  } catch (e) {
-    const latencyMs = Math.round(performance.now() - startedAt);
-    const error = e.name === 'AbortError' ? `nessuna risposta entro ${TIMEOUT_MS / 1000} s` : e.message;
-    return { url, ok: false, latencyMs, version: null, uptimeS: null, error };
-  } finally {
-    clearTimeout(timer);
   }
 }
 
@@ -117,23 +66,19 @@ async function readEnvironmentAndSession(role) {
  * dipende da Pinia, così resta testabile e riusabile.
  */
 export async function collect(role) {
-  const [backend, supabaseStatus, rest] = await Promise.all([
-    probeBackend(),
+  const [supabaseStatus, rest] = await Promise.all([
     probeSupabase(),
     readEnvironmentAndSession(role),
   ]);
-  return { backend, supabase: supabaseStatus, ...rest };
+  return { supabase: supabaseStatus, ...rest };
 }
 
 /**
- * Tre livelli, perché due non distinguono il caso interessante: un servizio
- * raggiungibile ma sbagliato (versione diversa) è il guasto silenzioso.
+ * Tre livelli. Con un solo servizio da sondare il "warn" resta utile per la
+ * lentezza: un'app che risponde in 3 secondi non è rotta, ma non è sana.
  */
 export function overallStatus(d) {
-  if (!d.backend.ok || !d.supabase.ok) return 'down';
-  const versionMismatch =
-    !d.backend.version || d.backend.version !== d.environment.appVersion;
-  const slow = d.backend.latencyMs > SLOW_MS || d.supabase.latencyMs > SLOW_MS;
-  if (versionMismatch || slow || d.backend.error) return 'warn';
+  if (!d.supabase.ok) return 'down';
+  if (d.supabase.latencyMs > SLOW_MS) return 'warn';
   return 'ok';
 }

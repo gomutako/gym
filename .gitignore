@@ -39,3 +39,6 @@ frontend/ios/App/.npm-cache/
 .idea/
 # Artefatti "mark of the web" di WSL/Windows
 *:Zone.Identifier
+
+# Script e2e e SQL usa-e-getta (convenzione: prefisso tmp-, da rimuovere dopo l'uso)
+scripts/tmp-*

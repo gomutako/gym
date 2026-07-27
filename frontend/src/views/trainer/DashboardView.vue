@@ -3,7 +3,8 @@
 import { ref, onMounted } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useAuthStore } from '@/stores/auth';
-import { api } from '@/lib/api';
+import { listClasses } from '@/lib/data/classes';
+import { listClassParticipants } from '@/lib/data/bookings';
 import IdentityCard from '@/components/IdentityCard.vue';
 
 const auth = useAuthStore();
@@ -31,7 +32,7 @@ async function toggle(classId) {
   if (!participants.value[classId]) {
     loadingParts.value = classId;
     try {
-      participants.value[classId] = await api.get(`/api/bookings/class/${classId}`);
+      participants.value[classId] = await listClassParticipants(classId);
     } finally {
       loadingParts.value = null;
     }
@@ -41,7 +42,7 @@ async function toggle(classId) {
 onMounted(async () => {
   try {
     // Tutte le classi, filtrate su quelle di cui sono trainer
-    const all = await api.get('/api/classes');
+    const all = await listClasses();
     classes.value = all.filter((c) => c.trainer_id === user.value.id);
   } finally {
     loading.value = false;

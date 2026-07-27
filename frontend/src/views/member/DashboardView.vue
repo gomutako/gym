@@ -7,7 +7,8 @@ import { ref, computed, onMounted } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useAuthStore } from '@/stores/auth';
 import { supabase } from '@/lib/supabase';
-import { api } from '@/lib/api';
+import { listOwnBookings } from '@/lib/data/bookings';
+import { listOwnSessions } from '@/lib/data/sessions';
 import WorkoutDays from '@/components/WorkoutDays.vue';
 import Combobox from '@/components/Combobox.vue';
 import IdentityCard from '@/components/IdentityCard.vue';
@@ -62,10 +63,10 @@ function formatDate(iso) {
 
 onMounted(async () => {
   try {
-    // Prenotazioni + sessioni: via backend
+    // Prenotazioni + sessioni: lettura diretta da Supabase (RLS)
     [bookings.value, sessions.value] = await Promise.all([
-      api.get('/api/bookings'),
-      api.get('/api/sessions'),
+      listOwnBookings(user.value.id),
+      listOwnSessions(user.value.id),
     ]);
 
     // Schede: lettura diretta da Supabase (RLS: il member vede solo le proprie)

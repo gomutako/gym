@@ -1,7 +1,8 @@
 <script setup>
 // Admin: gestione palinsesto corsi — crea, modifica, elimina.
 import { ref, onMounted, computed } from 'vue';
-import { api } from '@/lib/api';
+import { listClasses, createClass, updateClass, deleteClass } from '@/lib/data/classes';
+import { listUsers } from '@/lib/data/profiles';
 import Modal from '@/components/Modal.vue';
 import Combobox from '@/components/Combobox.vue';
 
@@ -46,8 +47,8 @@ async function load() {
   loading.value = true;
   try {
     const [cls, users] = await Promise.all([
-      api.get('/api/classes'),
-      api.get('/api/users'),
+      listClasses(),
+      listUsers(),
     ]);
     classes.value = cls;
     trainers.value = users.filter((u) => u.role === 'trainer');
@@ -96,9 +97,9 @@ async function submit() {
       max_capacity: Number(form.value.max_capacity),
     };
     if (isEditing.value) {
-      await api.patch(`/api/classes/${editId.value}`, payload);
+      await updateClass(editId.value, payload);
     } else {
-      await api.post('/api/classes', payload);
+      await createClass(payload);
     }
     closeForm();
     await load();
@@ -113,7 +114,7 @@ async function remove(id) {
   if (!confirm('Eliminare questo corso? Le prenotazioni collegate verranno rimosse.')) return;
   error.value = '';
   try {
-    await api.del(`/api/classes/${id}`);
+    await deleteClass(id);
     if (editId.value === id) closeForm();
     await load();
   } catch (e) {

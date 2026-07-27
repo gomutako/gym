@@ -4,7 +4,8 @@ import { ref, computed, watch, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
 import { useAuthStore } from '@/stores/auth';
-import { api } from '@/lib/api';
+import { listWorkoutsForMember, setWorkoutActive } from '@/lib/data/workouts';
+import { listOwnSessions, startSession } from '@/lib/data/sessions';
 import Combobox from '@/components/Combobox.vue';
 
 const router = useRouter();
@@ -47,7 +48,7 @@ async function toggleActive() {
   error.value = '';
   const next = !s.is_active;
   try {
-    await api.patch(`/api/workouts/${s.id}/active`, { is_active: next });
+    await setWorkoutActive(s.id, next);
     for (const w of schede.value) w.is_active = next && w.id === s.id;
   } catch (e) {
     error.value = e.message;
@@ -75,10 +76,11 @@ async function start() {
   starting.value = true;
   error.value = '';
   try {
-    const session = await api.post('/api/sessions', {
-      workout_id: selectedSchedaId.value,
-      day_index: Number(selectedDayIndex.value),
-    });
+    const session = await startSession(
+      selectedSchedaId.value,
+      Number(selectedDayIndex.value),
+      user.value.id
+    );
     router.push({ name: 'session', params: { id: session.id } });
   } catch (e) {
     error.value = e.message;
@@ -286,8 +288,8 @@ async function load() {
   loading.value = true;
   try {
     [schede.value, sessions.value] = await Promise.all([
-      api.get(`/api/workouts/member/${user.value.id}`),
-      api.get('/api/sessions'),
+      listWorkoutsForMember(user.value.id),
+      listOwnSessions(user.value.id),
     ]);
     // Preseleziona la scheda "in uso", se presente
     const active = schede.value.find((s) => s.is_active);

@@ -1,0 +1,34 @@
+{
+  // =====================================================
+  // Cloudflare — pubblicazione della SPA come Worker con asset statici.
+  //
+  // Non c'è codice Worker: nessun campo "main". È un progetto di soli file
+  // statici, che Cloudflare serve dalla sua rete. Tutta la logica sta nel
+  // browser e in Supabase.
+  //
+  // Deploy: lo fa Cloudflare a ogni push sul branch di produzione, eseguendo
+  //   build:  npm run build --workspace frontend
+  //   deploy: npx wrangler deploy
+  // Da locale si può fare lo stesso con `npx wrangler deploy` dopo `npm run build`.
+  // =====================================================
+  "name": "pallade",
+  "compatibility_date": "2026-07-27",
+
+  "assets": {
+    // Prodotta da `npm run build --workspace frontend`
+    "directory": "./frontend/dist",
+
+    // Le rotte le risolve il router Vue nel browser: una richiesta a
+    // /allenamento o /reset-password non corrisponde a nessun file. Senza
+    // questa impostazione risponderebbe 404 e ogni link diretto — compreso
+    // quello del reset password che arriva per email — si romperebbe.
+    // Serve index.html con status 200, mantenendo l'URL.
+    "not_found_handling": "single-page-application"
+  },
+
+  // Log delle richieste nel dashboard: utile per capire se un 404 arriva
+  // davvero a Cloudflare o si ferma prima (DNS, certificato).
+  "observability": {
+    "enabled": true
+  }
+}

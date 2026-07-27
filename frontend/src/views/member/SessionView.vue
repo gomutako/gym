@@ -5,7 +5,8 @@
 // partire un TIMER di recupero. A fine recupero la riga diventa gialla.
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { api } from '@/lib/api';
+import { getSession, updateSession } from '@/lib/data/sessions';
+import { listExercises } from '@/lib/data/exercises';
 import ImageCarousel from '@/components/ImageCarousel.vue';
 import * as healthkit from '@/lib/healthkit';
 
@@ -183,7 +184,7 @@ onUnmounted(() => {
 async function persist() {
   error.value = '';
   try {
-    await api.patch(`/api/sessions/${session.value.id}`, {
+    await updateSession(session.value.id, {
       exercises_log: session.value.exercises_log,
     });
   } catch (e) {
@@ -252,7 +253,7 @@ async function complete() {
         // biometrici opzionali: non bloccare il completamento della sessione
       }
     }
-    await api.patch(`/api/sessions/${session.value.id}`, {
+    await updateSession(session.value.id, {
       exercises_log: session.value.exercises_log,
       completed_at: new Date().toISOString(),
       ...(biometrics_json ? { biometrics_json } : {}),
@@ -268,8 +269,8 @@ async function complete() {
 onMounted(async () => {
   try {
     [session.value, catalog.value] = await Promise.all([
-      api.get(`/api/sessions/${route.params.id}`),
-      api.get('/api/exercises'),
+      getSession(route.params.id),
+      listExercises(),
     ]);
     if (hkSupported && session.value && !session.value.completed_at) {
       try {

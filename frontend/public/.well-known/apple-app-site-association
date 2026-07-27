@@ -1,0 +1,15 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["7M9683Z95M.it.pallade.app"],
+        "components": [
+          {
+            "/": "/reset-password",
+            "comment": "Il link del reset password nell'email deve aprire l'app, non Safari"
+          }
+        ]
+      }
+    ]
+  }
+}

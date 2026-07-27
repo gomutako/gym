@@ -5,7 +5,7 @@
 // filtrabile dalla ricerca e visibile/modificabile nel form.
 // L'immagine è condivisa: rappresenta il tipo di esercizio.
 import { ref, computed, watch, onMounted } from 'vue';
-import { api } from '@/lib/api';
+import { listExercises, createExercise, updateExercise, deleteExercise } from '@/lib/data/exercises';
 import { exerciseImageUrl, uploadExerciseImage } from '@/lib/storage';
 import Modal from '@/components/Modal.vue';
 import Combobox from '@/components/Combobox.vue';
@@ -128,7 +128,7 @@ function closeForm() {
 async function load() {
   loading.value = true;
   try {
-    exercises.value = await api.get('/api/exercises');
+    exercises.value = await listExercises();
   } catch (e) {
     error.value = e.message;
   } finally {
@@ -162,7 +162,7 @@ async function save() {
 
     if (editingId.value) {
       // In modifica: i campi opzionali vuoti diventano null (svuotamento esplicito)
-      await api.patch(`/api/exercises/${editingId.value}`, {
+      await updateExercise(editingId.value, {
         name: form.value.name,
         muscle_group: form.value.muscle_group || null,
         description: form.value.description || null,
@@ -180,7 +180,7 @@ async function save() {
         image_paths, // elenco ordinato completo (carousel)
       });
     } else {
-      await api.post('/api/exercises', {
+      await createExercise({
         name: form.value.name,
         muscle_group: form.value.muscle_group || undefined,
         description: form.value.description || undefined,
@@ -210,7 +210,7 @@ async function save() {
 async function remove(ex) {
   if (!confirm(`Eliminare "${ex.name}" dal catalogo?`)) return;
   try {
-    await api.del(`/api/exercises/${ex.id}`);
+    await deleteExercise(ex.id);
     if (editingId.value === ex.id) closeForm();
     await load();
   } catch (e) {

@@ -1,0 +1,61 @@
+name: DB migrate
+
+# Applica le migration di supabase/migrations/ al progetto Supabase CLOUD.
+#
+# Perché un workflow e non un comando locale: da WSL `supabase db push` non
+# raggiunge l'host diretto del DB (solo IPv6), e incollare l'SQL a mano nel SQL
+# Editor significa dover ricordarsi di registrare la versione in
+# supabase_migrations.schema_migrations. Qui la CLI fa entrambe le cose.
+#
+# ATTIVAZIONE MANUALE di proposito: le migration vanno applicate PRIMA del
+# deploy del codice che le usa (un client vecchio ignora in silenzio le colonne
+# che non conosce → il dato non si salva e nessuno segnala un errore). Farle
+# scattare in automatico sul push metterebbe in corsa la migration e il deploy
+# del frontend su Cloudflare Pages.
+#
+# Secret richiesto (Settings → Secrets and variables → Actions):
+#   SUPABASE_DB_URL  connection string del "Session pooler"
+#                    (Dashboard → Database → Connection string → Session pooler),
+#                    con la password percent-encoded.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Solo anteprima, senza applicare'
+        type: boolean
+        default: true
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Versione allineata alla devDependency "supabase" della root:
+      # aggiornarla qui quando si aggiorna il package.json.
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.109.1
+
+      - name: Stato delle migration sul remoto
+        run: supabase migration list --db-url "$SUPABASE_DB_URL"
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+
+      - name: Anteprima
+        run: supabase db push --dry-run --db-url "$SUPABASE_DB_URL"
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+
+      - name: Applica
+        if: ${{ inputs.dry_run == false }}
+        run: supabase db push --db-url "$SUPABASE_DB_URL"
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+
+      - name: Stato finale
+        if: ${{ inputs.dry_run == false }}
+        run: supabase migration list --db-url "$SUPABASE_DB_URL"
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}

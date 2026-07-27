@@ -5,7 +5,7 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { supabase } from '@/lib/supabase';
-import { api } from '@/lib/api';
+import { updateOwnProfile } from '@/lib/data/profiles';
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(null); // utente Supabase (auth)
@@ -84,10 +84,11 @@ export const useAuthStore = defineStore('auth', () => {
     await fetchProfile();
   }
 
-  // Aggiorna il PROPRIO profilo (nome/telefono/avatar) via backend e
-  // riallinea lo stato locale con la riga restituita.
+  // Aggiorna il PROPRIO profilo (nome/telefono/avatar/dati fisici) e riallinea
+  // lo stato locale con la riga restituita. I campi ammessi li filtra
+  // updateOwnProfile; role, abbonamento ed email li rifiuta il database.
   async function updateProfile(fields) {
-    const updated = await api.patch('/api/profile', fields);
+    const updated = await updateOwnProfile(user.value.id, fields);
     profile.value = updated;
     return updated;
   }
@@ -95,10 +96,14 @@ export const useAuthStore = defineStore('auth', () => {
   // Invia l'email di recupero password. Il link riporta l'utente su
   // /reset-password con una sessione di recovery. Non fa errore se l'email
   // non esiste (evita l'enumerazione degli account).
+  // NESSUN redirectTo di proposito: il link nell'email viene costruito dal
+  // template lato Supabase con {{ .SiteURL }} (= https://pallade.it in
+  // produzione), quindi punta sempre al dominio web. Passare
+  // `${window.location.origin}/reset-password` — come si faceva prima —
+  // produceva `capacitor://localhost/reset-password` quando la richiesta
+  // partiva dall'app iOS: un link che nessun client di posta su iOS apre.
   async function sendPasswordReset(email) {
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
-    });
+    const { error } = await supabase.auth.resetPasswordForEmail(email);
     if (error) throw error;
   }
 

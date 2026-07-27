@@ -3,13 +3,16 @@
 //
 // L'app iOS è un bundle statico: le VITE_* sono cotte nel build, quindi lo
 // stesso binario non può distinguere simulatore da device a build-time.
-// Soluzione: il bundle contiene due terne di variabili e all'avvio si sceglie.
+// Soluzione: il bundle contiene due COPPIE di variabili e all'avvio si sceglie.
 //
-//   simulatore iOS -> terna VITE_*_SIM  (Supabase + backend in locale)
-//   device / web   -> terna VITE_*      (Supabase Cloud + backend EC2)
+//   simulatore iOS -> coppia VITE_*_SIM  (Supabase locale)
+//   device / web   -> coppia VITE_*      (Supabase Cloud)
 //
-// La terna senza suffisso resta il default, così `npm run dev:fe` nel browser
-// e il build web per l'EC2 si comportano esattamente come prima.
+// La coppia senza suffisso resta il default, così `npm run dev:fe` nel browser
+// si comporta come il build di produzione.
+//
+// Non c'è più un `apiBaseUrl`: eliminato il backend, l'unico servizio da
+// configurare è Supabase.
 // =====================================================
 import { Capacitor } from '@capacitor/core';
 import { Device } from '@capacitor/device';
@@ -17,17 +20,14 @@ import { Device } from '@capacitor/device';
 const DEFAULT_CONFIG = {
   supabaseUrl: import.meta.env.VITE_SUPABASE_URL,
   supabaseAnonKey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-  apiBaseUrl: import.meta.env.VITE_API_BASE_URL,
 };
 
 const SIM_CONFIG = {
   supabaseUrl: import.meta.env.VITE_SUPABASE_URL_SIM,
   supabaseAnonKey: import.meta.env.VITE_SUPABASE_ANON_KEY_SIM,
-  apiBaseUrl: import.meta.env.VITE_API_BASE_URL_SIM,
 };
 
-const isComplete = (config) =>
-  Boolean(config.supabaseUrl && config.supabaseAnonKey && config.apiBaseUrl);
+const isComplete = (config) => Boolean(config.supabaseUrl && config.supabaseAnonKey);
 
 let resolved = null;
 
@@ -58,7 +58,7 @@ export async function initRuntimeConfig() {
 
   if (simulator && !useSim) {
     console.warn(
-      '[config] simulatore rilevato ma terna VITE_*_SIM incompleta: uso la configurazione di default'
+      '[config] simulatore rilevato ma coppia VITE_*_SIM incompleta: uso la configurazione di default'
     );
   }
 
@@ -66,14 +66,12 @@ export async function initRuntimeConfig() {
 
   if (!isComplete(config)) {
     throw new Error(
-      'Variabili mancanti: VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY e VITE_API_BASE_URL (vedi frontend/.env)'
+      'Variabili mancanti: VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY (vedi frontend/.env)'
     );
   }
 
   resolved = { ...config, isSimulator: simulator, source: useSim ? 'sim' : 'default' };
-  console.info(
-    `[config] ambiente: ${resolved.source} — Supabase ${resolved.supabaseUrl}, API ${resolved.apiBaseUrl}`
-  );
+  console.info(`[config] ambiente: ${resolved.source} — Supabase ${resolved.supabaseUrl}`);
   return resolved;
 }
 

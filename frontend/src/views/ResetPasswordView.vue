@@ -1,13 +1,23 @@
 <script setup>
-// Reset password: raggiunta dal link nell'email di recupero. Supabase legge il
-// token dall'URL (detectSessionInUrl) e crea una sessione di recovery, poi
-// emette l'evento PASSWORD_RECOVERY. Qui impostiamo la nuova password.
+// Reset password: raggiunta dal link nell'email di recupero.
+//
+// Flusso attuale — il template dell'email costruisce il link come
+//   {{ .SiteURL }}/reset-password?token_hash=…&type=recovery
+// e qui il token viene scambiato per una sessione di recovery con verifyOtp().
+// Serve perché il vecchio flusso (ConfirmationURL + redirectTo) rimbalzava
+// sull'origine del client: dentro l'app iOS è `capacitor://localhost`, che
+// nessun client di posta su iOS sa aprire → utente bloccato.
+//
+// Flusso legacy — mantenuto come ripiego: se il link non porta un token_hash
+// (email inviate prima del cambio di template, o link con la sessione nel
+// fragment), vale ancora detectSessionInUrl + evento PASSWORD_RECOVERY.
 import { ref, onMounted, onBeforeUnmount } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth';
 
 const router = useRouter();
+const route = useRoute();
 const auth = useAuthStore();
 
 const ready = ref(false);       // sessione di recovery presente → form abilitato
@@ -22,7 +32,25 @@ const done = ref(false);
 let sub = null;
 
 onMounted(async () => {
-  // La sessione può esserci già (token già processato) o arrivare via evento
+  // --- Flusso attuale: token_hash nella query ---
+  const tokenHash = route.query.token_hash;
+  if (typeof tokenHash === 'string' && tokenHash) {
+    const { error: verifyError } = await supabase.auth.verifyOtp({
+      token_hash: tokenHash,
+      type: 'recovery',
+    });
+    checking.value = false;
+    if (!verifyError) {
+      ready.value = true;
+      // Il token è monouso: fuori dall'URL, così non resta nella cronologia
+      // né viene rigiocato da un ricaricamento della pagina.
+      router.replace({ name: 'reset-password', query: {} });
+    }
+    // in caso di errore resta ready=false → la vista mostra "link non valido"
+    return;
+  }
+
+  // --- Flusso legacy: sessione già stabilita o in arrivo via evento ---
   const { data } = await supabase.auth.getSession();
   if (data.session) ready.value = true;
 
