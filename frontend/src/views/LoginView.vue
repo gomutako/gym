@@ -88,7 +88,7 @@ function setMode(next) {
             <path d="M4 9v6M7 7v10M17 7v10M20 9v6M7 12h10" />
           </svg>
         </div>
-        <h1 class="mt-4 text-2xl font-bold tracking-tight text-gray-900">Gym Manager</h1>
+        <h1 class="mt-4 text-2xl font-bold tracking-tight text-gray-900">Pallade</h1>
         <p class="text-sm text-gray-500">
           {{ mode === 'login' ? 'Accedi al tuo account' : mode === 'register' ? 'Crea un nuovo account' : 'Recupera la password' }}
         </p>

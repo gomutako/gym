@@ -3,6 +3,10 @@ import vue from '@vitejs/plugin-vue';
 import { VitePWA } from 'vite-plugin-pwa';
 import { fileURLToPath, URL } from 'node:url';
 import { readFileSync } from 'node:fs';
+// Stessa fonte di verità dei colori usata da tailwind.config.js: il theme_color
+// del manifest e il meta theme-color devono coincidere col brand, altrimenti la
+// barra del browser e la schermata di avvio della PWA restano di un altro colore.
+import { brand, surface } from './src/lib/palette.js';
 
 // Letto con readFileSync e non con `import ... with { type: 'json' }`: in Node 22
 // gli import JSON sono ancora sperimentali e stampano un warning a ogni build.
@@ -16,12 +20,12 @@ export default defineConfig({
       registerType: 'autoUpdate', // aggiorna il service worker in automatico
       includeAssets: ['apple-touch-icon.png'],
       manifest: {
-        name: 'Gym Manager',
-        short_name: 'Gym',
+        name: 'Pallade',
+        short_name: 'Pallade',
         description: 'Gestione palestra: schede, prenotazioni, allenamenti',
         lang: 'it',
-        theme_color: '#4f46e5',
-        background_color: '#f9fafb',
+        theme_color: brand[600],
+        background_color: surface.light,
         display: 'standalone', // avvio a schermo intero, senza barra del browser
         orientation: 'portrait',
         start_url: '/',
