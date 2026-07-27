@@ -244,15 +244,15 @@ otp_expiry = 3600
 # Template email personalizzati (italiano). In locale li usa Mailpit;
 # in produzione vanno incollati nel dashboard Supabase Cloud.
 [auth.email.template.recovery]
-subject = "Reimposta la tua password — Gym Manager"
+subject = "Reimposta la tua password — Pallade"
 content_path = "./supabase/templates/recovery.html"
 
 [auth.email.template.confirmation]
-subject = "Conferma la tua email — Gym Manager"
+subject = "Conferma la tua email — Pallade"
 content_path = "./supabase/templates/confirmation.html"
 
 [auth.email.template.email_change]
-subject = "Conferma il cambio email — Gym Manager"
+subject = "Conferma il cambio email — Pallade"
 content_path = "./supabase/templates/email_change.html"
 
 # SMTP di PRODUZIONE.
