@@ -6,6 +6,37 @@ versionamento [SemVer](https://semver.org/lang/it/).
 
 ## [Non rilasciato]
 
+## [2.2.0] — 2026-07-28
+
+Chiusi i requisiti tecnici che bloccavano la review dell'App Store, e riparato il recupero
+password dentro l'app — che non aveva mai potuto funzionare.
+
+### Aggiunto
+
+- **Cancellazione dell'account dall'app** (App Store 5.1.1(v)): Edge Function
+  `delete-account`, la seconda e ultima con la `service_role` key. L'id da cancellare viene
+  dal **JWT verificato e mai dal corpo della richiesta**. Rimuove a mano gli avatar dallo
+  Storage, che non segue le foreign key, e rifiuta la cancellazione dell'ultimo admin
+  rimasto. In fondo al profilo, con conferma da digitare.
+
+### Corretto
+
+- **Il link di recupero password apriva l'app ma non la schermata di reset.** Mancava
+  `@capacitor/app`: senza, l'universal link viene consegnato al guscio nativo e la WebView
+  resta ferma su `capacitor://localhost`, quindi il token non raggiungeva mai il router.
+  `lib/deep-links.js` ascolta `appUrlOpen` **e** `getLaunchUrl()` — la seconda copre l'avvio
+  a freddo, dove l'evento è già passato prima di poterlo ascoltare — e instrada solo i link
+  di `pallade.it`. Il difetto era invisibile finché il provisioning gratuito non firmava
+  l'entitlement: fino ad allora il link finiva in Safari, dove funzionava.
+- **Il nome sotto l'icona era «Gym»**: `CFBundleDisplayName` era rimasto quello del progetto
+  iniziale e `cap sync` non lo riscrive, quindi divergeva in silenzio da `appName`.
+
+### Modificato
+
+- **App bloccata in orientamento verticale** anche nel guscio nativo: il manifest PWA lo
+  dichiarava già, l'`Info.plist` no.
+- §7 dell'informativa privacy: la cancellazione si fa dall'app, non più solo via email.
+
 ## [2.1.0] — 2026-07-27
 
 Primo passo verso la pubblicazione su App Store: le pagine legali che la review pretende,
