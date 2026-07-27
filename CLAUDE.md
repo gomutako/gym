@@ -243,8 +243,15 @@ distrazione **è** una vulnerabilità, non un buco coperto da un secondo livello
   `bookings_enforce_capacity` (conta con `for update`, quindi senza race),
   `workouts_enforce_single_active`, `sync_subscription_end`, `sync_profile_email`,
   e i validatori di forma di `days_json`/`exercises_log`.
-- **Edge Function `admin-users`** — l'unico codice con la `service_role` key, per il cambio
-  email (che vive in `auth.users`). Rilegge il ruolo dal DB, non dal JWT.
+- **Edge Function `admin-users`** — cambio email (che vive in `auth.users`). Rilegge il
+  ruolo dal DB, non dal JWT.
+- **Edge Function `delete-account`** — l'utente cancella sé stesso (obbligatorio per
+  l'App Store, 5.1.1(v)). ⚠️ L'id da cancellare viene **dal JWT verificato, mai dal corpo
+  della richiesta**: un parametro `user_id` sarebbe una cancellazione di chiunque per
+  chiunque. Rifiuta l'ultimo admin rimasto, e rimuove a mano gli avatar dallo Storage,
+  che non segue le foreign key. Il resto cade per cascata da `auth.users`.
+
+Sono i due soli punti con la `service_role` key.
 
 Regola pratica: **tutto dal client** via `frontend/src/lib/data/`; la `service_role` key solo
 in una Edge Function, mai nel bundle. Aggiungendo una tabella o una colonna, la domanda da

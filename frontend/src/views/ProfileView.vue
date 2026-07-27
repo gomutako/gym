@@ -7,6 +7,7 @@ import { storeToRefs } from 'pinia';
 import { useAuthStore } from '@/stores/auth';
 import { useThemeStore } from '@/stores/theme';
 import { listSubscriptions } from '@/lib/data/subscriptions';
+import { deleteOwnAccount } from '@/lib/data/account';
 import { listExercises } from '@/lib/data/exercises';
 import { listWorkoutsForMember, setWorkoutActive, setWorkoutArchived } from '@/lib/data/workouts';
 import { avatarUrl, uploadAvatar } from '@/lib/storage';
@@ -278,6 +279,39 @@ const themeOptions = [
 async function logout() {
   await auth.logout();
   router.push({ name: 'login' });
+}
+
+// --- Eliminazione dell'account ---
+// Obbligatoria per l'App Store (5.1.1(v)) e irreversibile, quindi non basta un
+// confirm(): serve digitare la parola, così il tocco distratto non cancella
+// niente. La cancellazione vera la fa la Edge Function `delete-account`.
+const deleteOpen = ref(false);
+const deleteWord = ref('');
+const deleting = ref(false);
+const deleteError = ref('');
+const DELETE_WORD = 'ELIMINA';
+
+function openDelete() {
+  deleteWord.value = '';
+  deleteError.value = '';
+  deleteOpen.value = true;
+}
+
+async function confirmDelete() {
+  if (deleteWord.value.trim().toUpperCase() !== DELETE_WORD) return;
+  deleting.value = true;
+  deleteError.value = '';
+  try {
+    await deleteOwnAccount();
+    // La sessione punta a un utente che non esiste più: va chiusa comunque,
+    // anche se il logout fallisce per rete.
+    await auth.logout().catch(() => {});
+    deleteOpen.value = false;
+    router.push({ name: 'login' });
+  } catch (e) {
+    deleteError.value = e.message;
+    deleting.value = false;
+  }
 }
 </script>
 
@@ -697,6 +731,56 @@ async function logout() {
     >
       Esci
     </button>
+
+    <!-- Distruttiva: sotto il logout, discreta ma raggiungibile senza cercarla.
+         L'App Store pretende che la cancellazione sia dentro l'app. -->
+    <button
+      class="w-full py-1 text-center text-xs text-gray-400 underline active:scale-95"
+      @click="openDelete"
+    >
+      Elimina account
+    </button>
+
+    <Modal :open="deleteOpen" title="Elimina account" @close="deleteOpen = false">
+      <div class="space-y-3 text-sm">
+        <p class="text-gray-600">
+          Vengono eliminati definitivamente il tuo profilo, le tue schede, gli
+          allenamenti registrati, le prenotazioni, gli abbonamenti e la foto.
+          <strong class="text-gray-900">L'operazione non è reversibile</strong> e
+          non è possibile recuperare lo storico in seguito.
+        </p>
+        <p class="text-gray-600">
+          Per confermare digita <strong class="text-gray-900">{{ DELETE_WORD }}</strong>.
+        </p>
+        <input
+          v-model="deleteWord"
+          type="text"
+          autocapitalize="characters"
+          autocorrect="off"
+          spellcheck="false"
+          class="w-full rounded-xl border border-gray-300 px-3 py-2"
+          :placeholder="DELETE_WORD"
+        />
+        <p v-if="deleteError" class="rounded-lg bg-red-50 px-3 py-2 text-red-700">
+          {{ deleteError }}
+        </p>
+        <div class="flex gap-2 pt-1">
+          <button
+            class="flex-1 rounded-xl border border-gray-300 py-3 font-semibold text-gray-700"
+            @click="deleteOpen = false"
+          >
+            Annulla
+          </button>
+          <button
+            :disabled="deleting || deleteWord.trim().toUpperCase() !== DELETE_WORD"
+            class="flex-1 rounded-xl bg-red-600 py-3 font-semibold text-white active:scale-95 disabled:opacity-40"
+            @click="confirmDelete"
+          >
+            {{ deleting ? 'Eliminazione…' : 'Elimina' }}
+          </button>
+        </div>
+      </div>
+    </Modal>
 
     <AppCredits />
   </div>
