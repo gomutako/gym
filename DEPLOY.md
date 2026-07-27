@@ -196,11 +196,19 @@ npx supabase functions deploy admin-users
 # 3. codice: il push fa partire la build di Pages
 git push origin master
 
-# 4. app iOS (serve un Mac)
+# 4. app iOS (serve un Mac) — installazione sul device di sviluppo
 npm run build && npx cap sync ios
 xcodebuild -workspace frontend/ios/App/App.xcworkspace -scheme App \
   -configuration Debug -destination 'id=<UDID>' -allowProvisioningUpdates build
 ```
+
+⚠️ **La versione dell'app iOS non la alza `npm version`.** `MARKETING_VERSION` e
+`CURRENT_PROJECT_VERSION` stanno in `frontend/ios/App/App.xcodeproj/project.pbxproj` e vanno
+allineate a mano alla versione del `CHANGELOG` **prima** di archiviare. Il build number deve
+crescere a ogni upload, altrimenti App Store Connect rifiuta il pacchetto. Comandi e
+`ExportOptions.plist` per la build di release stanno in `CLAUDE.md`, sezione
+*Build di release e upload su App Store Connect* — flusso non ancora eseguito, serve
+l'Apple Developer Program a pagamento.
 
 Verifiche dopo il rilascio:
 

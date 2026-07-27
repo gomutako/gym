@@ -6,6 +6,41 @@ versionamento [SemVer](https://semver.org/lang/it/).
 
 ## [Non rilasciato]
 
+## [2.1.0] — 2026-07-27
+
+Primo passo verso la pubblicazione su App Store: le pagine legali che la review pretende,
+più l'eliminazione degli allenamenti chiesta dall'uso quotidiano.
+
+### Aggiunto
+
+- **Informativa privacy e termini di servizio** su `pallade.it/privacy.html` e
+  `/termini.html`. L'URL della privacy è un campo obbligatorio in App Store Connect. Sono
+  file statici serviti da Cloudflare, non rotte della SPA: restano leggibili anche se
+  l'app non si carica. I contenuti descrivono il trattamento reale — campi di `profiles`,
+  sessioni con carichi e orari, fornitori con la regione effettiva, sola lettura da Apple
+  Salute — e sono linkati dal profilo, fuori dai crediti collassabili.
+- **Eliminazione di un allenamento** dalla sua schermata (`deleteSession`). La policy RLS
+  lo consentiva già dal 23 luglio, ma nessuna funzione del client la usava. Il pulsante sta
+  nel dettaglio e non nello storico: in lista sarebbe finito a un dito da quello che apre
+  la sessione, e l'operazione non è reversibile. Se la sessione è in corso, lo stream
+  HealthKit viene fermato prima della cancellazione.
+
+### Modificato
+
+- Schermata di login senza le due decorazioni sfocate di sfondo.
+- `MARKETING_VERSION` del progetto Xcode allineata alla versione del changelog: era ferma
+  a 1.0 mentre il progetto era a 2.0.0, e `npm version` non la tocca.
+
+### Documentazione
+
+- Percorso completo per la **build di release iOS** (`archive` → `exportArchive` →
+  upload con chiave App Store Connect) in `CLAUDE.md`, con i comandi verificati contro
+  `xcodebuild -help` ma non ancora eseguiti: serve il programma a pagamento.
+- Due trappole trovate installando su device: `cap sync` va lanciato da `frontend/`, e il
+  provisioning gratuito **non firma** l'entitlement Associated Domains, quindi per
+  installare senza Apple Developer Program va rimosso a mano (e l'app resta senza
+  universal link).
+
 ## [2.0.0] — 2026-07-27
 
 Migrazione da EC2 a un'architettura senza server: l'app è statica su Cloudflare e parla

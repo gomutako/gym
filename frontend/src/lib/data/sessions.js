@@ -151,3 +151,19 @@ export async function updateSession(id, { exercises_log, completed_at, biometric
     MESSAGES
   );
 }
+
+/**
+ * Elimina una sessione, completata o no (member proprietario o admin: è quanto
+ * concede la policy `sessions_delete`).
+ *
+ * ⚠️ Sparisce anche dallo storico dei carichi: `startSession` precompila i pesi
+ * dall'ultima sessione completata che conteneva l'esercizio, quindi eliminarla
+ * fa ripartire la volta dopo dal valore precedente — o da vuoto, se non ce n'è.
+ */
+export async function deleteSession(id) {
+  const rows = unwrap(await db().from('workout_sessions').delete().eq('id', id).select('id'));
+  if (!rows?.length) {
+    throw new Error('Allenamento non trovato (o non hai i permessi per eliminarlo)');
+  }
+  return true;
+}

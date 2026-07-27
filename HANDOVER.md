@@ -150,6 +150,8 @@ git push origin develop           # la CI verifica la build
 git flow release start 1.0.2
 npm version 1.0.2 --no-git-tag-version --workspaces --include-workspace-root
 # aggiorna CHANGELOG.md
+# se rilasci anche l'app iOS: MARKETING_VERSION e CURRENT_PROJECT_VERSION nel
+# project.pbxproj NON li tocca npm version — vedi DEPLOY.md §5
 git commit -am "chore(release): 1.0.2"
 GIT_MERGE_AUTOEDIT=no git flow release finish -m "Release 1.0.2" 1.0.2
 git push origin develop master --tags

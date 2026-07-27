@@ -1,0 +1,83 @@
+/* =====================================================
+   Stile delle pagine legali (privacy, termini).
+   Sono file statici serviti da Cloudflare senza passare dalla SPA: devono
+   restare leggibili anche se l'app non si carica, quindi niente build, niente
+   font remoti, nessuno script. I colori sono quelli del brand (rosa antico,
+   vedi frontend/src/lib/palette.js) copiati a mano: qui non arriva Tailwind.
+   ===================================================== */
+:root {
+  --brand-600: #a45668;
+  --brand-700: #8e4858;
+  --brand-50: #fff2f4;
+  --ink: #1f2937;
+  --ink-soft: #6b7280;
+  --line: #e5e7eb;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 2rem 1.25rem 4rem;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--ink);
+  background: #fafafa;
+  -webkit-text-size-adjust: 100%;
+}
+
+main { max-width: 44rem; margin: 0 auto; }
+
+header { border-bottom: 1px solid var(--line); padding-bottom: 1.25rem; margin-bottom: 2rem; }
+header .brand { font-weight: 700; color: var(--brand-600); letter-spacing: -0.01em; }
+header .updated { font-size: 0.875rem; color: var(--ink-soft); margin: 0.25rem 0 0; }
+
+h1 { font-size: 1.625rem; line-height: 1.25; margin: 0.5rem 0 0; letter-spacing: -0.02em; }
+h2 {
+  font-size: 1.125rem;
+  margin: 2.5rem 0 0.75rem;
+  padding-top: 0.25rem;
+  letter-spacing: -0.01em;
+}
+h3 { font-size: 1rem; margin: 1.5rem 0 0.5rem; }
+
+p, li { color: #374151; }
+ul { padding-left: 1.25rem; }
+li { margin: 0.35rem 0; }
+
+a { color: var(--brand-700); }
+
+table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.9375rem; }
+th, td { text-align: left; padding: 0.5rem 0.5rem 0.5rem 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--ink-soft); font-weight: 600; font-size: 0.8125rem; text-transform: uppercase; letter-spacing: 0.03em; }
+
+/* Tabelle strette su telefono: scorrono da sole invece di allargare la pagina */
+.scroll { overflow-x: auto; }
+
+.callout {
+  background: var(--brand-50);
+  border-left: 3px solid var(--brand-600);
+  padding: 0.75rem 1rem;
+  margin: 1.5rem 0;
+  border-radius: 0 0.5rem 0.5rem 0;
+}
+.callout p { margin: 0.35rem 0; }
+
+footer {
+  margin-top: 3rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.875rem;
+  color: var(--ink-soft);
+}
+footer a { margin-right: 1rem; }
+
+@media (prefers-color-scheme: dark) {
+  :root { --ink: #f3f4f6; --ink-soft: #9ca3af; --line: #374151; --brand-50: #3f2830; }
+  body { background: #111827; color: var(--ink); }
+  p, li { color: #d1d5db; }
+  a { color: #d3919e; }
+  header .brand { color: #d3919e; }
+  .callout { border-left-color: #d3919e; }
+}

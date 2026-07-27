@@ -40,6 +40,16 @@ const libraries = [
       Versione {{ version }} · Crediti {{ open ? '⌃' : '⌄' }}
     </button>
 
+    <!-- Sempre visibili, non dentro i crediti collassati: l'App Store pretende
+         che l'informativa sia raggiungibile, e chi la cerca non deve indovinare
+         che sta sotto "Crediti". Puntano al sito, non ai file dentro il bundle,
+         così restano una pagina sola da aggiornare. -->
+    <p class="mt-2 text-[11px] text-gray-400">
+      <a href="https://pallade.it/privacy.html" target="_blank" rel="noopener" class="underline">Privacy</a>
+      ·
+      <a href="https://pallade.it/termini.html" target="_blank" rel="noopener" class="underline">Termini</a>
+    </p>
+
     <div v-if="open" class="mx-auto mt-3 max-w-xs space-y-3 text-left text-[11px] leading-relaxed text-gray-400">
       <div>
         <p class="font-semibold text-gray-500">Catalogo esercizi</p>

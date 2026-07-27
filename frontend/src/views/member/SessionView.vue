@@ -5,7 +5,7 @@
 // partire un TIMER di recupero. A fine recupero la riga diventa gialla.
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { getSession, updateSession } from '@/lib/data/sessions';
+import { getSession, updateSession, deleteSession } from '@/lib/data/sessions';
 import { listExercises } from '@/lib/data/exercises';
 import ImageCarousel from '@/components/ImageCarousel.vue';
 import * as healthkit from '@/lib/healthkit';
@@ -263,6 +263,28 @@ async function complete() {
     error.value = e.message;
   } finally {
     completing.value = false;
+  }
+}
+
+// Elimina l'allenamento. Sta qui e non nello storico: nella lista il bersaglio
+// sarebbe a un dito dal pulsante che apre la sessione, e l'operazione non si
+// annulla. Chi elimina è dentro l'allenamento, quindi vede cosa sta buttando.
+const deleting = ref(false);
+async function remove() {
+  if (!session.value) return;
+  if (!confirm('Eliminare questo allenamento? L\'operazione non è reversibile.')) return;
+  deleting.value = true;
+  error.value = '';
+  try {
+    if (hkSupported) {
+      try { await healthkit.stop(); } catch { /* il monitor si ferma comunque all'uscita */ }
+      if (hkUnsub) { hkUnsub(); hkUnsub = null; }
+    }
+    await deleteSession(session.value.id);
+    router.push({ name: 'training' });
+  } catch (e) {
+    error.value = e.message;
+    deleting.value = false;
   }
 }
 
@@ -556,6 +578,21 @@ onMounted(async () => {
       >
         Torna al calendario
       </button>
+
+      <!-- Distruttiva: staccata dalle azioni principali, in fondo alla pagina -->
+      <div class="border-t border-gray-100 pt-4">
+        <button
+          :disabled="deleting"
+          class="w-full rounded-xl border border-red-200 bg-red-50 py-3 text-sm font-semibold text-red-700 active:scale-95 disabled:opacity-60"
+          @click="remove"
+        >
+          {{ deleting ? 'Eliminazione…' : 'Elimina allenamento' }}
+        </button>
+        <p class="mt-2 text-center text-xs text-gray-400">
+          Sparisce da calendario e statistiche, e i carichi che hai registrato qui
+          non serviranno più a precompilare la prossima volta.
+        </p>
+      </div>
     </template>
   </div>
 </template>
