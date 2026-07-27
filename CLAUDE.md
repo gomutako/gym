@@ -88,8 +88,8 @@ app, con scheda e utenti da rifare). Conseguenza pratica: le installazioni fatte
 id **non ricevono aggiornamenti**, vanno disinstallate e reinstallate.
 
 ```bash
-npm run build                     # produce frontend/dist (usa .env.production)
-npx cap sync ios                  # copia dist in ios/App/App/public + aggiorna i pod
+npm run build                     # dalla root: produce frontend/dist (usa .env.production)
+cd frontend && npx cap sync ios   # DALLA CARTELLA frontend: copia dist in ios/App/App/public + pod
 xcrun devicectl list devices      # UDID dei device collegati
 
 # Device fisico
@@ -105,10 +105,21 @@ xcrun devicectl device process launch --device <UDID> --console it.pallade.app
 - **Se l'iPhone è bloccato il lancio viene rifiutato** (`FBSOpenApplicationErrorDomain
   error 7`, "device was not, or could not be, unlocked"): l'installazione riesce comunque,
   serve solo sbloccarlo e rilanciare.
+- ⚠️ **`cap sync` va lanciato da `frontend/`**, dove sta `capacitor.config.ts`. Dalla root
+  fallisce con un messaggio fuorviante — *"ios platform has not been added yet"* — che fa
+  pensare a un progetto Xcode mancante mentre è solo la cwd sbagliata.
+- ⚠️ **Il provisioning free non firma l'entitlement Associated Domains.** Con il team
+  personale gratuito `xcodebuild` si ferma **prima di compilare**: *"Personal development
+  teams … do not support the Associated Domains capability"* seguito da *"No profiles for
+  'it.pallade.app' were found"*. Per installare su device senza l'Apple Developer Program
+  bisogna togliere `com.apple.developer.associated-domains` da `App.entitlements`,
+  compilare, e ripristinare il file con `git checkout`. L'app così installata **non apre
+  gli universal link**: il link di reset password finisce in Safari invece che nell'app —
+  tutto il resto (login, dati, HealthKit) funziona.
 - **Provisioning free (7 giorni).** Il profilo è `iOS Team Provisioning Profile` generato
   da Xcode; scaduto quello l'app va reinstallata. Gli entitlements HealthKit
-  (`healthkit`, `healthkit.access: health-records`, `background-delivery`) sono già nel
-  profilo, quindi la firma non richiede nulla di manuale.
+  (`healthkit`, `healthkit.access: health-records`, `background-delivery`) sono invece
+  supportati dal team personale e non richiedono niente di manuale.
 - Per il simulatore vale lo stesso ciclo con
   `-destination 'platform=iOS Simulator,name=iPhone 16 Pro'` e `xcrun simctl`. Ricordare
   che nel simulatore l'app punta al **Supabase locale**: serve `npm run db:start` attivo,
@@ -143,6 +154,72 @@ Prerequisiti che **bloccano la review** se mancanti, dettagliati nella Fase 6 di
   né TestFlight né la pubblicazione.
 - **Supabase Pro** consigliato prima di avere utenti veri: il piano free non fa backup
   automatici e mette in pausa il progetto dopo una settimana di inattività.
+
+#### Build di release e upload su App Store Connect
+
+⚠️ **Questo flusso non è mai stato eseguito**: senza Apple Developer Program a pagamento
+l'`archive` firma ma l'export in `app-store-connect` fallisce (il provisioning free non
+produce certificati di distribuzione). I comandi sono verificati contro `xcodebuild -help`
+di Xcode 26.6, non contro un rilascio vero — al primo tentativo aspettarsi aggiustamenti,
+e aggiornare questa sezione con quello che si scopre.
+
+**1. Allineare la versione.** `npm version` tocca i `package.json`, **non** il progetto
+Xcode: `MARKETING_VERSION` e `CURRENT_PROJECT_VERSION` vivono in `project.pbxproj` e vanno
+alzati a mano (Xcode → target App → General, oppure `sed`). `CFBundleVersion`
+(= `CURRENT_PROJECT_VERSION`) deve **crescere a ogni upload**, anche a parità di versione
+marketing: App Store Connect rifiuta un build number già visto. `agvtool` qui non serve —
+il progetto non usa `VERSIONING_SYSTEM = apple-generic` e i suoi comandi non trovano nulla
+da aggiornare.
+
+```bash
+# <ver> = la versione del CHANGELOG, <n> = build number precedente + 1
+sed -i '' "s/MARKETING_VERSION = .*/MARKETING_VERSION = <ver>;/; \
+          s/CURRENT_PROJECT_VERSION = .*/CURRENT_PROJECT_VERSION = <n>;/" \
+  frontend/ios/App/App.xcodeproj/project.pbxproj
+grep -n "MARKETING_VERSION\|CURRENT_PROJECT_VERSION" frontend/ios/App/App.xcodeproj/project.pbxproj
+```
+
+**2. Ricostruire il bundle prima dell'archive.** Saltare questo passo non dà errore:
+si archivia la SPA vecchia già presente in `ios/App/App/public` e l'app pubblicata resta
+indietro di una versione senza che nulla lo segnali.
+
+```bash
+npm run build && npx cap sync ios     # ricorda: non terminano, verifica l'artefatto e chiudi per PID
+
+xcodebuild -workspace frontend/ios/App/App.xcworkspace -scheme App \
+  -configuration Release -destination 'generic/platform=iOS' \
+  -archivePath build/App.xcarchive -allowProvisioningUpdates archive
+
+xcodebuild -exportArchive -archivePath build/App.xcarchive \
+  -exportOptionsPlist frontend/ios/App/ExportOptions.plist \
+  -exportPath build/export -allowProvisioningUpdates \
+  -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_<KEYID>.p8 \
+  -authenticationKeyID <KEYID> -authenticationKeyIssuerID <ISSUER-UUID>
+```
+
+`ExportOptions.plist` (da creare; contiene solo il Team ID, non è un segreto):
+
+```xml
+<key>method</key>        <string>app-store-connect</string>
+<key>teamID</key>        <string>7M9683Z95M</string>
+<key>destination</key>   <string>upload</string>
+<key>signingStyle</key>  <string>automatic</string>
+```
+
+- `destination: upload` carica direttamente su App Store Connect; con `export` (default)
+  si ottiene solo l'`.ipa` in `build/export`, da caricare poi con Transporter.
+- `method: app-store-connect` è il nome attuale — `app-store` funziona ancora ma è
+  deprecato. Per una build di test interna il valore è `release-testing`.
+- La chiave `.p8` si genera in App Store Connect → Users and Access → Integrations, si
+  scarica **una volta sola** e va tenuta fuori dal repo. In alternativa a
+  `-authenticationKey*` basta l'account Apple aggiunto in Xcode → Settings → Accounts, ma
+  con la chiave il comando funziona anche in CI.
+- `-allowProvisioningUpdates` serve anche in export: è lì che viene creato il profilo di
+  distribuzione, entitlement HealthKit compresi.
+
+**3. Dopo l'upload**: la build resta in *Processing* qualche minuto, poi va compilata la
+export compliance (nessuna crittografia oltre HTTPS → esente) prima che TestFlight la renda
+installabile.
 
 ## Architettura
 
