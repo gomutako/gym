@@ -11,6 +11,7 @@ import { useAuthStore } from './stores/auth';
 import { useThemeStore } from './stores/theme';
 import { initRuntimeConfig } from './lib/runtime-config';
 import { initSupabase } from './lib/supabase';
+import { initDeepLinks } from './lib/deep-links';
 import './style.css';
 
 const app = createApp(App);
@@ -40,6 +41,12 @@ bootstrap().then(
   () => {
     app.use(router);
     app.mount('#app');
+    // Dopo il mount: gli universal link (recupero password) devono poter
+    // navigare, e il router deve essere già installato. Un fallimento qui non
+    // deve buttare giù l'app — al massimo si perde il link.
+    initDeepLinks(router).catch((err) =>
+      console.error('[avvio] universal link non agganciati:', err)
+    );
   },
   (err) => {
     // Configurazione assente o incompleta: l'app non può funzionare. Su device
