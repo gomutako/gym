@@ -111,16 +111,25 @@ Custom domain `pallade.it` (+ `www` in redirect). Il certificato lo gestisce Clo
 sa servire TLS per quel nome, Cloudflare risponde **525** (handshake fallito). Un 522/523
 significherebbe invece origine irraggiungibile.
 
-Due file in `frontend/public/` fanno funzionare cose che altrimenti si rompono in silenzio:
+Il **fallback della SPA** lo dichiara `wrangler.jsonc`:
 
-- **`_redirects`** — `/*  /index.html  200`. Senza, ogni deep link risponde 404: Pages cerca
-  un file con quel path, mentre le rotte le risolve il router Vue. Riguarda anche il link
-  del reset password.
-- **`_headers`** — forza `application/json` su `.well-known/apple-app-site-association` (non
-  ha estensione, altrimenti verrebbe servito come octet-stream e iOS lo ignorerebbe), e
-  impedisce la cache di `sw.js`/`index.html`: il plugin PWA è in `registerType: autoUpdate`,
-  e un service worker servito da cache tiene l'utente su una versione vecchia anche dopo un
-  deploy riuscito.
+```jsonc
+"assets": { "not_found_handling": "single-page-application" }
+```
+
+Senza, ogni deep link risponderebbe 404 — Cloudflare cerca un file con quel path, mentre le
+rotte le risolve il router Vue. Riguarda anche il link del reset password.
+
+⚠️ **Non usare un file `_redirects` con `/* /index.html 200`**: con i Worker ad asset statici
+`/index.html` viene normalizzato a `/`, che rientra in `/*` e riparte. Cloudflare lo rileva e
+**rifiuta il deploy** con `Infinite loop detected in this rule [code: 100324]` — dopo aver
+caricato gli asset, quindi il fallimento arriva a build già riuscita.
+
+**`frontend/public/_headers`** invece serve, e viene letto: forza `application/json` su
+`.well-known/apple-app-site-association` (non ha estensione, altrimenti verrebbe servito come
+octet-stream e iOS lo ignorerebbe) e impedisce la cache di `sw.js`/`index.html`, perché il
+plugin PWA è in `registerType: autoUpdate` e un service worker servito da cache tiene
+l'utente su una versione vecchia anche dopo un deploy riuscito.
 
 ---
 

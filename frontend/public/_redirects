@@ -1,6 +1,0 @@
-# Cloudflare Pages — fallback della Single Page Application.
-# Senza questa riga un deep link (es. https://pallade.it/allenamento, o il link
-# del reset password) risponde 404: Pages cerca un file con quel path e non lo
-# trova, perché le rotte le risolve il router Vue lato client.
-# Lo status 200 (non 301) è essenziale: serve index.html mantenendo l'URL.
-/*  /index.html  200
