@@ -306,7 +306,7 @@ onMounted(load);
 
 <template>
   <div class="space-y-6">
-    <h1 class="text-lg font-bold text-gray-900">Allena</h1>
+    <h1 class="text-lg font-bold text-gray-900">Allenamenti</h1>
     <p v-if="error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
 
     <!-- Inizia allenamento -->
