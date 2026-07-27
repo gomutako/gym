@@ -74,12 +74,8 @@ function setMode(next) {
 </script>
 
 <template>
-  <div class="relative flex min-h-screen items-center justify-center overflow-hidden bg-gray-50 px-6 py-10">
-    <!-- Decorazioni sfocate (aurora) -->
-    <div class="pointer-events-none absolute -left-24 -top-24 h-72 w-72 rounded-full bg-brand/30 blur-3xl"></div>
-    <div class="pointer-events-none absolute -bottom-24 -right-24 h-72 w-72 rounded-full bg-brand-300/30 blur-3xl"></div>
-
-    <div class="relative w-full max-w-sm">
+  <div class="flex min-h-screen items-center justify-center bg-gray-50 px-6 py-10">
+    <div class="w-full max-w-sm">
       <!-- Logo + titolo -->
       <div class="mb-6 text-center">
         <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-brand to-brand-400 shadow-lg shadow-brand/30">
