@@ -8,6 +8,10 @@ frontend/dist/
 # Variabili d'ambiente (mai committare le chiavi reali!)
 .env
 .env.*
+# Eccezione: contiene solo l'URL del progetto e la chiave publishable, che sono
+# già dentro il bundle servito al browser. Versionarlo evita che la build passi
+# ma produca un'app bianca, e serve anche alla build dell'app iOS.
+!frontend/.env.production
 !.env.example
 !.env.production.example
 
