@@ -77,6 +77,45 @@ function fmtExpiry(date) {
         <p v-if="data.supabase.error" class="text-red-700">{{ data.supabase.error }}</p>
       </div>
 
+      <!-- Schema del database: il disallineamento fra codice e migrazioni è il
+           guasto che non dà errori, quindi è quello che il badge esiste per vedere -->
+      <div>
+        <div class="flex items-center justify-between">
+          <span class="font-semibold text-gray-700">Schema database</span>
+          <span :class="data.schema.ok ? 'text-emerald-700' : 'text-amber-700'">
+            {{ data.schema.ok ? 'allineato' : 'disallineato' }}
+          </span>
+        </div>
+        <p class="text-gray-400">
+          applicata {{ data.schema.applied || '—' }} · attesa {{ data.schema.expected || '—' }}
+        </p>
+        <p v-if="data.schema.error" class="text-amber-700">⚠️ {{ data.schema.error }}</p>
+      </div>
+
+      <!-- Edge Function -->
+      <div>
+        <div class="flex items-center justify-between">
+          <span class="font-semibold text-gray-700">Edge Function</span>
+          <span :class="data.edgeFunction.ok ? 'text-emerald-700' : 'text-amber-700'">
+            {{ data.edgeFunction.ok ? 'ok' : 'non raggiungibile' }} · {{ fmtMs(data.edgeFunction.latencyMs) }}
+          </span>
+        </div>
+        <p class="text-gray-400">{{ data.edgeFunction.name }} — cambio email</p>
+        <p v-if="data.edgeFunction.error" class="text-amber-700">⚠️ {{ data.edgeFunction.error }}</p>
+      </div>
+
+      <!-- Storage -->
+      <div>
+        <div class="flex items-center justify-between">
+          <span class="font-semibold text-gray-700">Storage</span>
+          <span :class="data.storage.ok ? 'text-emerald-700' : 'text-amber-700'">
+            {{ data.storage.ok ? 'ok' : 'immagini non servite' }} · {{ fmtMs(data.storage.latencyMs) }}
+          </span>
+        </div>
+        <p class="text-gray-400">bucket exercise-images</p>
+        <p v-if="data.storage.error" class="text-amber-700">⚠️ {{ data.storage.error }}</p>
+      </div>
+
       <!-- Ambiente e sessione -->
       <div class="flex justify-between text-gray-500">
         <span>
