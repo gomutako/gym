@@ -4,8 +4,11 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
+	<!-- Nome sotto l'icona. Va tenuto allineato ad `appName` in
+	     capacitor.config.ts: `cap sync` NON lo riscrive, quindi divergono in
+	     silenzio (qui era rimasto "Gym" dal progetto iniziale). -->
 	<key>CFBundleDisplayName</key>
-	<string>Gym</string>
+	<string>Pallade</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
