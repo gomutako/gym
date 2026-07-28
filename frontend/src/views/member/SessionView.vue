@@ -375,6 +375,12 @@ async function loadSession() {
   liveKcal.value = null;
   lastSampleAt.value = null;
   hkError.value = '';
+  // Le chiavi di restEndsAt sono POSIZIONALI (`${indiceEsercizio}_${indiceSerie}`),
+  // non legate all'id della sessione: senza svuotarla, una riga nella stessa
+  // posizione della sessione nuova erediterebbe il recupero (e il countdown
+  // giallo) di quella vecchia, anche se in quella nuova non è mai stata
+  // segnata. Su un mount fresco è già vuota, quindi qui non cambia nulla.
+  Object.keys(restEndsAt).forEach((k) => delete restEndsAt[k]);
   try {
     [session.value, catalog.value] = await Promise.all([
       getSession(route.params.id),
