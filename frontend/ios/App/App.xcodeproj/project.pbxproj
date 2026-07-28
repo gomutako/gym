@@ -20,6 +20,8 @@
 		AC5812D8F3701CE392095145 /* HealthKitLivePlugin.m in Sources */ = {isa = PBXBuildFile; fileRef = 4D3351FD37CD850C1F55D76B /* HealthKitLivePlugin.m */; };
 		C1A70B0100000000000000A1 /* NativeTabBarPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A70B0100000000000000A3 /* NativeTabBarPlugin.swift */; };
 		C1A70B0100000000000000A2 /* NativeTabBarPlugin.m in Sources */ = {isa = PBXBuildFile; fileRef = C1A70B0100000000000000A4 /* NativeTabBarPlugin.m */; };
+		C1A70B0200000000000000B1 /* RestTimerPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A70B0200000000000000B3 /* RestTimerPlugin.swift */; };
+		C1A70B0200000000000000B2 /* RestTimerPlugin.m in Sources */ = {isa = PBXBuildFile; fileRef = C1A70B0200000000000000B4 /* RestTimerPlugin.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -36,6 +38,8 @@
 		822B63A615EBDDCCAB21AE5E /* HealthKitLivePlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HealthKitLivePlugin.swift; sourceTree = "<group>"; };
 		C1A70B0100000000000000A3 /* NativeTabBarPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeTabBarPlugin.swift; sourceTree = "<group>"; };
 		C1A70B0100000000000000A4 /* NativeTabBarPlugin.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = NativeTabBarPlugin.m; sourceTree = "<group>"; };
+		C1A70B0200000000000000B3 /* RestTimerPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RestTimerPlugin.swift; sourceTree = "<group>"; };
+		C1A70B0200000000000000B4 /* RestTimerPlugin.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = RestTimerPlugin.m; sourceTree = "<group>"; };
 		8B091E74B5C053D4952BF1E1 /* ViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
 		A0805B5E94256E37D6187EDA /* App.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
 		AF277DCFFFF123FFC6DF26C7 /* Pods_App.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_App.framework; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -96,6 +100,8 @@
 				4D3351FD37CD850C1F55D76B /* HealthKitLivePlugin.m */,
 				C1A70B0100000000000000A3 /* NativeTabBarPlugin.swift */,
 				C1A70B0100000000000000A4 /* NativeTabBarPlugin.m */,
+				C1A70B0200000000000000B3 /* RestTimerPlugin.swift */,
+				C1A70B0200000000000000B4 /* RestTimerPlugin.m */,
 				A0805B5E94256E37D6187EDA /* App.entitlements */,
 				8B091E74B5C053D4952BF1E1 /* ViewController.swift */,
 			);
@@ -229,6 +235,8 @@
 				AC5812D8F3701CE392095145 /* HealthKitLivePlugin.m in Sources */,
 				C1A70B0100000000000000A1 /* NativeTabBarPlugin.swift in Sources */,
 				C1A70B0100000000000000A2 /* NativeTabBarPlugin.m in Sources */,
+				C1A70B0200000000000000B1 /* RestTimerPlugin.swift in Sources */,
+				C1A70B0200000000000000B2 /* RestTimerPlugin.m in Sources */,
 				A794929E59BA27A758E00BDC /* ViewController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

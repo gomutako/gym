@@ -34,8 +34,41 @@ export function clampExerciseIndex(raw, count) {
   return Math.min(Math.max(n, 0), count - 1);
 }
 
-// --- Le tre funzioni che toccano il nativo (guscio, riempito nel Task 3) ---
-export async function ensurePermission() { return false; }
-export async function schedule() {}
-export async function cancel() {}
-export function onTap() {}
+// Il permesso si chiede una volta sola: se l'utente nega, iOS non ripropone il
+// dialogo e per decisione di progetto non gli si mostra alcun messaggio.
+let permission = null; // null = mai chiesto, true/false = esito
+
+export async function ensurePermission() {
+  if (!isSupported()) return false;
+  if (permission !== null) return permission;
+  try {
+    const { granted } = await RestTimer.requestPermission();
+    permission = !!granted;
+  } catch {
+    permission = false;
+  }
+  return permission;
+}
+
+/** Programma (sostituendola) l'unica notifica di fine recupero. */
+export async function schedule({ seconds, body, sessionId, exerciseIndex }) {
+  if (!isSupported()) return;
+  await RestTimer.schedule({
+    seconds,
+    title: 'Recupero terminato',
+    body,
+    sessionId,
+    exerciseIndex,
+  });
+}
+
+export async function cancel() {
+  if (!isSupported()) return;
+  await RestTimer.cancel();
+}
+
+/** Tocco sulla notifica: handler({ sessionId, exerciseIndex }). */
+export function onTap(handler) {
+  if (!isSupported()) return;
+  RestTimer.addListener('restTimerTapped', handler);
+}
