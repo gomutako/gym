@@ -3,7 +3,7 @@
 // Ogni card ha le righe delle SERIE: reps effettuate + carico (kg o livello),
 // precompilate dalla volta scorsa; ogni riga si segna come eseguita e fa
 // partire un TIMER di recupero. A fine recupero la riga diventa gialla.
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue';
+import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { getSession, updateSession, deleteSession } from '@/lib/data/sessions';
 import { listExercises } from '@/lib/data/exercises';
@@ -132,6 +132,15 @@ function go(i) {
 }
 const next = () => go(index.value + 1);
 const prev = () => go(index.value - 1);
+
+// La notifica può arrivare mentre si è già su questa sessione: lì il router non
+// rimonta nulla (stessi params), quindi il cambio di esercizio va seguito dalla
+// query invece che dal ciclo di vita del componente.
+watch(() => route.query.ex, (ex) => {
+  if (ex !== undefined && log.value.length) {
+    go(restNotify.clampExerciseIndex(ex, log.value.length));
+  }
+});
 
 let touchX = 0;
 function onTouchStart(e) { touchX = e.changedTouches[0].screenX; }
@@ -336,6 +345,12 @@ onMounted(async () => {
       getSession(route.params.id),
       listExercises(),
     ]);
+    // ?ex=<indice>: arriva dal tocco sulla notifica di fine recupero, per
+    // aprire la vista già sull'esercizio da cui il recupero era partito.
+    const ex = route.query.ex;
+    if (ex !== undefined) {
+      go(restNotify.clampExerciseIndex(ex, log.value.length));
+    }
     if (hkSupported && session.value && !session.value.completed_at) {
       try {
         const auth = await healthkit.requestAuth();
