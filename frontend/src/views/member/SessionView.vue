@@ -225,8 +225,15 @@ function onSetButton(exI, rowI) {
     const rest = log.value[exI].rest_seconds;
     if (rest > 0) {
       const ex = log.value[exI];
+      // Il dialogo di sistema per il permesso può restare aperto per secoli
+      // rispetto a un tap: se nel frattempo questa riga viene chiusa in anticipo
+      // o annullata, restEndsAt cambia (nuovo istante o azzerato). Si ricontrolla
+      // com'era AL MOMENTO di programmare, altrimenti un permesso concesso in
+      // ritardo farebbe partire una notifica "fantasma" per un recupero non più
+      // attivo.
+      const restEndAtSchedule = restEndsAt[keyOf(exI, rowI)];
       restNotify.ensurePermission().then((ok) => {
-        if (!ok) return;
+        if (!ok || restEndsAt[keyOf(exI, rowI)] !== restEndAtSchedule) return;
         restNotify.schedule({
           seconds: rest,
           body: restNotify.restBody(
