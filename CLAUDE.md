@@ -120,6 +120,12 @@ xcrun devicectl device process launch --device <UDID> --console it.pallade.app
   da Xcode; scaduto quello l'app va reinstallata. Gli entitlements HealthKit
   (`healthkit`, `healthkit.access: health-records`, `background-delivery`) sono invece
   supportati dal team personale e non richiedono niente di manuale.
+- **Notifica di fine recupero**: plugin Swift `RestTimerPlugin`, non
+  `@capacitor/local-notifications` — la versione compatibile con Capacitor 6 non espone
+  `interruptionLevel`, quindi la notifica non sarebbe Time Sensitive e una Full Immersion
+  la silenzierebbe. Ne esiste una sola alla volta (id costante): riprogrammare sostituisce
+  la pendente. Il permesso si chiede al primo "fatto" con recupero; se negato l'app tace e
+  non lo richiede più.
 - Per il simulatore vale lo stesso ciclo con
   `-destination 'platform=iOS Simulator,name=iPhone 16 Pro'` e `xcrun simctl`. Ricordare
   che nel simulatore l'app punta al **Supabase locale**: serve `npm run db:start` attivo,
