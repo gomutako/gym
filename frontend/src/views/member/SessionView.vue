@@ -9,6 +9,7 @@ import { getSession, updateSession, deleteSession } from '@/lib/data/sessions';
 import { listExercises } from '@/lib/data/exercises';
 import ImageCarousel from '@/components/ImageCarousel.vue';
 import * as healthkit from '@/lib/healthkit';
+import * as restNotify from '@/lib/rest-notifications';
 
 // Immagini di un esercizio del catalogo: tutte (image_paths) o la sola copertina
 const exerciseImages = (ex) =>
@@ -218,13 +219,32 @@ function onSetButton(exI, rowI) {
     row.done_at = new Date().toISOString();
     startRest(exI, rowI, log.value[exI].rest_seconds);
     persist();
+
+    // Notifica di fine recupero: il permesso si chiede qui, al primo "fatto"
+    // con recupero, dove il motivo è evidente.
+    const rest = log.value[exI].rest_seconds;
+    if (rest > 0) {
+      const ex = log.value[exI];
+      restNotify.ensurePermission().then((ok) => {
+        if (!ok) return;
+        restNotify.schedule({
+          seconds: rest,
+          body: restNotify.restBody(
+            catalogById.value[ex.exercise_id]?.name, rowI + 1, ex.sets_log.length),
+          sessionId: session.value.id,
+          exerciseIndex: exI,
+        }).catch(() => { /* la notifica è un di più: non blocca l'allenamento */ });
+      });
+    }
   } else if (state === 'resting') {
     endRest(exI, rowI); // done resta true, già persistito
+    restNotify.cancel().catch(() => {});
   } else {
     row.done = false;
     row.done_at = null;
     clearRest(exI, rowI);
     persist();
+    restNotify.cancel().catch(() => {});
   }
 }
 
@@ -272,6 +292,7 @@ async function complete() {
       completed_at: new Date().toISOString(),
       ...(biometrics_json ? { biometrics_json } : {}),
     });
+    restNotify.cancel().catch(() => {});
     router.push({ name: 'training' });
   } catch (e) {
     error.value = e.message;
