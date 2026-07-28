@@ -133,14 +133,23 @@ function go(i) {
 const next = () => go(index.value + 1);
 const prev = () => go(index.value - 1);
 
-// La notifica può arrivare mentre si è già su questa sessione: lì il router non
-// rimonta nulla (stessi params), quindi il cambio di esercizio va seguito dalla
-// query invece che dal ciclo di vita del componente.
-watch(() => route.query.ex, (ex) => {
+// Applica l'indice richiesto da ?ex= (tocco sulla notifica di fine recupero)
+// al carosello, clampato sul log ATTUALE. Estratta perché serve in due punti
+// — il watch subito sotto (query che cambia a vista già aperta, stessa
+// sessione) e loadSession() più in basso (sessione appena ricaricata) — ed è
+// importante che in entrambi i casi il log sia già quello giusto: applicarla
+// prima porterebbe a clampare sul log della sessione sbagliata.
+function applyExerciseFromQuery() {
+  const ex = route.query.ex;
   if (ex !== undefined && log.value.length) {
     go(restNotify.clampExerciseIndex(ex, log.value.length));
   }
-});
+}
+
+// La notifica può arrivare mentre si è già su questa sessione: lì il router non
+// rimonta nulla (stessi params), quindi il cambio di esercizio va seguito dalla
+// query invece che dal ciclo di vita del componente.
+watch(() => route.query.ex, applyExerciseFromQuery);
 
 let touchX = 0;
 function onTouchStart(e) { touchX = e.changedTouches[0].screenX; }
@@ -339,17 +348,50 @@ async function remove() {
   }
 }
 
-onMounted(async () => {
+// Carica sessione + catalogo per l'id CORRENTE della rotta e (ri)avvia il
+// monitoraggio HealthKit se la sessione è ancora in corso. Estratta in una
+// funzione — anziché vivere solo dentro onMounted — perché va richiamata
+// anche quando cambia route.params.id: il tocco su una notifica di
+// un'ALTRA sessione (es. mentre si sta guardando lo storico di una sessione
+// diversa) naviga con lo stesso name 'session', cambiando solo l'id, quindi
+// il router NON rimonta il componente e onMounted da solo non riparte —
+// senza questa funzione richiamabile a parte, la vista resterebbe con i dati
+// della sessione vecchia (vedi watch su route.params.id più sotto).
+async function loadSession() {
+  loading.value = true;
+  error.value = '';
+  // Il monitoraggio HealthKit eventualmente già attivo (listener + intervallo
+  // di tick) appartiene alla sessione PRECEDENTE: va fermato PRIMA di
+  // ricaricare, altrimenti i suoi campioni continuerebbero ad accumularsi nel
+  // badge della sessione appena aperta (liveKcal è una somma progressiva). Su
+  // un mount fresco hkUnsub/hkTickInterval sono ancora null, quindi qui non
+  // succede nulla: lo stesso codice copre "prima apertura" e "cambio sessione".
+  if (hkTickInterval) { clearInterval(hkTickInterval); hkTickInterval = null; }
+  if (hkUnsub) { hkUnsub(); hkUnsub = null; }
+  if (hkSupported) {
+    try { await healthkit.stop(); } catch { /* nessun monitoraggio attivo: ignorabile */ }
+  }
+  liveHR.value = null;
+  liveKcal.value = null;
+  lastSampleAt.value = null;
+  hkError.value = '';
   try {
     [session.value, catalog.value] = await Promise.all([
       getSession(route.params.id),
       listExercises(),
     ]);
-    // ?ex=<indice>: arriva dal tocco sulla notifica di fine recupero, per
-    // aprire la vista già sull'esercizio da cui il recupero era partito.
-    const ex = route.query.ex;
-    if (ex !== undefined) {
-      go(restNotify.clampExerciseIndex(ex, log.value.length));
+    // ?ex=<indice>: arriva dal tocco sulla notifica di fine recupero. Va
+    // applicato SOLO ORA che session/log corrispondono alla sessione appena
+    // caricata — applicarlo prima del fetch clamperebbe sul log sbagliato.
+    if (route.query.ex !== undefined) {
+      applyExerciseFromQuery();
+    } else {
+      // Nessuna query: si riparte dal primo esercizio. Senza questo reset,
+      // passando a una sessione diversa l'indice resterebbe quello della
+      // sessione precedente — se il nuovo log è più corto, `current` diventa
+      // null e il template (che vi accede senza optional chaining) si rompe.
+      index.value = 0;
+      descExpanded.value = false;
     }
     if (hkSupported && session.value && !session.value.completed_at) {
       try {
@@ -384,7 +426,15 @@ onMounted(async () => {
   } finally {
     loading.value = false;
   }
-});
+}
+
+onMounted(loadSession);
+
+// Cambio di sessione a vista già montata (tocco su notifica di un'ALTRA
+// sessione, o comunque una navigazione che cambia solo l'id nell'URL): senza
+// questo watch onMounted non riparte e la vista resterebbe sulla sessione
+// vecchia — vedi commento su loadSession().
+watch(() => route.params.id, loadSession);
 </script>
 
 <template>
