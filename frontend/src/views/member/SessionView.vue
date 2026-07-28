@@ -140,41 +140,55 @@ function onTouchEnd(e) {
 }
 
 // --- Timer di recupero per riga ---
-const rest = reactive({}); // key -> secondi rimanenti (0 = recupero finito)
-const intervals = {};
+// Si conserva l'ISTANTE DI FINE, non i secondi rimanenti: in background iOS
+// sospende la WebView e un contatore che scala da sé resterebbe indietro
+// rispetto alla notifica già consegnata.
+const restEndsAt = reactive({}); // key -> epoch ms di fine (0 = recupero chiuso)
+const nowTick = ref(Date.now());
+let tickInterval = null;
 const keyOf = (exI, rowI) => `${exI}_${rowI}`;
+
+function restRemaining(exI, rowI) {
+  const end = restEndsAt[keyOf(exI, rowI)];
+  if (end === undefined) return null;
+  if (end === 0) return 0;
+  return Math.max(0, Math.ceil((end - nowTick.value) / 1000));
+}
 
 function startRest(exI, rowI, seconds) {
   const k = keyOf(exI, rowI);
-  clearInterval(intervals[k]);
-  if (!seconds || seconds <= 0) { rest[k] = 0; return; } // nessun recupero -> subito pronto
-  rest[k] = seconds;
-  intervals[k] = setInterval(() => {
-    if (rest[k] > 0) rest[k] -= 1;
-    if (rest[k] <= 0) { clearInterval(intervals[k]); intervals[k] = null; }
-  }, 1000);
+  if (!seconds || seconds <= 0) { restEndsAt[k] = 0; return; } // nessun recupero -> subito pronto
+  restEndsAt[k] = Date.now() + seconds * 1000;
 }
 function clearRest(exI, rowI) {
-  const k = keyOf(exI, rowI);
-  clearInterval(intervals[k]);
-  delete rest[k];
+  delete restEndsAt[keyOf(exI, rowI)];
 }
-// Termina subito il recupero (equivale allo scadere del timer): riga gialla
+// Chiude subito il recupero (equivale allo scadere): riga gialla
 function endRest(exI, rowI) {
-  const k = keyOf(exI, rowI);
-  clearInterval(intervals[k]);
-  intervals[k] = null;
-  rest[k] = 0;
+  restEndsAt[keyOf(exI, rowI)] = 0;
 }
-// Stato riga: 'resting' (timer in corso), 'over' (recupero finito), null
+// Stato riga: 'resting' (timer in corso), 'over' (recupero finito), null (mai avviato)
 function restState(exI, rowI) {
-  const v = rest[keyOf(exI, rowI)];
-  if (v === undefined) return null;
+  const v = restRemaining(exI, rowI);
+  if (v === null) return null;
   return v > 0 ? 'resting' : 'over';
 }
 
+onMounted(() => {
+  // Un intervallo solo per la vista: aggiorna l'"adesso" da cui tutte le righe
+  // ricavano il proprio rimanente.
+  tickInterval = setInterval(() => { nowTick.value = Date.now(); }, 500);
+  // Rientrando dal background il tick può essere stato sospeso: riallinea subito.
+  document.addEventListener('visibilitychange', onVisible);
+});
+
+function onVisible() {
+  if (!document.hidden) nowTick.value = Date.now();
+}
+
 onUnmounted(() => {
-  Object.values(intervals).forEach((id) => id && clearInterval(id));
+  if (tickInterval) clearInterval(tickInterval);
+  document.removeEventListener('visibilitychange', onVisible);
   if (hkTickInterval) clearInterval(hkTickInterval);
   if (hkUnsub) hkUnsub();
   if (hkSupported) healthkit.stop();
@@ -520,7 +534,7 @@ onMounted(async () => {
                       @click="onSetButton(index, ri)"
                     >
                       <template v-if="row.done && restState(index, ri) === 'resting'">
-                        ⏱ {{ fmtTimer(rest[`${index}_${ri}`]) }}
+                        ⏱ {{ fmtTimer(restRemaining(index, ri)) }}
                       </template>
                       <template v-else-if="row.done">✓ fatto</template>
                       <template v-else>Fatto</template>
