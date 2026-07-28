@@ -62,8 +62,22 @@ sapere su cosa sta girando.
 | `cancel()` | annulla la notifica pendente |
 | `onTap(handler)` | registra il gestore del tocco |
 
-Dipendenza nuova: `@capacitor/local-notifications` (versione 6, allineata al resto).
+Sotto non c'è un plugin di terze parti ma **codice nostro**: vedi la nota qui sotto.
 Entitlement nuovo in `App.entitlements`.
+
+### `frontend/ios/App/App/RestTimerPlugin.swift` (nuovo)
+
+⚠️ **Perché non `@capacitor/local-notifications`.** Verificato scaricando il pacchetto: la
+versione 6 — l'unica compatibile con il Capacitor 6 del progetto — **non espone
+`interruptionLevel`**, né nelle definizioni TypeScript né nel codice Swift. Il supporto
+esiste dalla 7/8, che richiederebbe di migrare Capacitor: troppo rischio per una feature
+sola. Senza `interruptionLevel` la notifica non è Time Sensitive e una Full Immersion la
+silenzia, cioè fallisce proprio nel caso che motiva la scelta.
+
+Si scrive quindi un `CAPPlugin` che parla direttamente con `UNUserNotificationCenter`,
+sullo stesso modello di `NativeTabBarPlugin` e `HealthKitLivePlugin` già presenti.
+Espone `requestPermission`, `schedule`, `cancel`, e notifica il tocco al lato JS.
+Nessuna dipendenza JavaScript nuova.
 
 ### Identità della notifica
 
