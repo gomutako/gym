@@ -6,6 +6,36 @@ versionamento [SemVer](https://semver.org/lang/it/).
 
 ## [Non rilasciato]
 
+## [2.3.0] — 2026-07-28
+
+### Aggiunto
+
+- **Notifica di fine recupero fra le serie** (app iOS). Al termine di una serie parte una
+  notifica **Time Sensitive** — passa anche con una Full Immersion attiva, che chi si allena
+  con la musica ha quasi sempre — e il tocco riapre l'app **sull'esercizio da cui è
+  partita**, anche ad app chiusa. Ne esiste una sola alla volta: programmarne una nuova
+  sostituisce la pendente, e solo la riga che la possiede può annullarla.
+
+  Sotto c'è un plugin Swift del progetto, `RestTimerPlugin`, e non
+  `@capacitor/local-notifications`: la versione compatibile con Capacitor 6 non espone
+  `interruptionLevel`, quindi la notifica non sarebbe Time Sensitive.
+
+  Il permesso si chiede all'**apertura dell'allenamento**, dove HealthKit chiede già il
+  suo: chiederlo al primo "fatto" interrompeva in mezzo a una serie e faceva arrivare in
+  ritardo la prima notifica in assoluto, programmata solo alla risposta dell'utente ma con
+  la durata piena del recupero. Se il permesso è negato l'app tace e non insiste.
+
+### Corretto
+
+- **Il timer di recupero ora legge l'orologio** invece di scalare un contatore: in
+  background iOS sospende la WebView e il conto alla rovescia restava indietro rispetto al
+  tempo reale — un difetto invisibile finché il timer era l'unica fonte, ma che accanto a
+  una notifica già arrivata sarebbe diventato una contraddizione a schermo.
+- **La schermata dell'allenamento ricarica i dati** quando cambia la sessione senza che il
+  componente venga rimontato (tocco su una notifica di un'altra sessione), e azzera i timer
+  di recupero della precedente: le chiavi sono posizionali, quindi una riga della sessione
+  nuova ereditava il countdown di quella vecchia.
+
 ## [2.2.0] — 2026-07-28
 
 Chiusi i requisiti tecnici che bloccavano la review dell'App Store, e riparato il recupero

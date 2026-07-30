@@ -10,6 +10,10 @@
 	</array>
 	<key>com.apple.developer.healthkit.background-delivery</key>
 	<true/>
+	<!-- Notifica di fine recupero: deve passare anche con una Full Immersion
+	     attiva, che chi si allena con la musica ha quasi sempre. -->
+	<key>com.apple.developer.usernotifications.time-sensitive</key>
+	<true/>
 	<!-- Universal link: fa aprire ALL'APP i link https://pallade.it/… invece di
 	     Safari. Serve al reset password, il cui link arriva per email e deve
 	     riportare l'utente dentro l'app. Richiede che
