@@ -81,10 +81,24 @@ public class RestTimerPlugin: CAPPlugin, UNUserNotificationCenterDelegate {
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let info = response.notification.request.content.userInfo
+        // retainUntilConsumed: true — con l'app chiusa (avvio a freddo) questo
+        // delegate scatta PRIMA che il bootstrap JS (async: config, client
+        // Supabase, sessione) arrivi a registrare il listener in main.js. Senza
+        // questo flag CAPPlugin.notifyListeners scarta l'evento in silenzio se
+        // non c'è ancora nessuno in ascolto (vedi CAPPlugin.m) e il tocco va
+        // perso: l'app si apre sulla home invece che sull'esercizio giusto.
+        // Con il flag l'evento resta in memoria nel plugin (stesso processo,
+        // stessa istanza: il delegate è agganciato in load(), molto prima del
+        // mount di Vue) finché il primo addListener('restTimerTapped', …) non
+        // lo consuma: a differenza degli universal link (deep-links.js), qui
+        // non serve un secondo canale tipo `getLaunchUrl()` per recuperarlo
+        // all'avvio — la ritenzione è già built-in nel bridge nativo e la
+        // consegna è automatica al primo listener registrato, qualunque sia
+        // l'ordine fra tocco e mount.
         notifyListeners("restTimerTapped", data: [
             "sessionId": info["sessionId"] as? String ?? "",
             "exerciseIndex": info["exerciseIndex"] as? Int ?? 0,
-        ])
+        ], retainUntilConsumed: true)
         completionHandler()
     }
 
