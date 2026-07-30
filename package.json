@@ -1,6 +1,6 @@
 {
   "name": "gym-manager",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "private": true,
   "description": "Web app mobile-first per la gestione di una palestra (Vue 3 + Supabase)",
   "workspaces": [
