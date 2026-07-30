@@ -258,18 +258,21 @@ function onSetButton(exI, rowI) {
             catalogById.value[ex.exercise_id]?.name, rowI + 1, ex.sets_log.length),
           sessionId: session.value.id,
           exerciseIndex: exI,
+          ownerKey: keyOf(exI, rowI),
         }).catch(() => { /* la notifica è un di più: non blocca l'allenamento */ });
       });
     }
   } else if (state === 'resting') {
     endRest(exI, rowI); // done resta true, già persistito
-    restNotify.cancel().catch(() => {});
+    // Annulla solo se QUESTA riga possiede ancora la notifica pendente: nel
+    // frattempo un'altra riga può averla già sostituita (vedi rest-notifications.js).
+    restNotify.cancel(keyOf(exI, rowI)).catch(() => {});
   } else {
     row.done = false;
     row.done_at = null;
     clearRest(exI, rowI);
     persist();
-    restNotify.cancel().catch(() => {});
+    restNotify.cancel(keyOf(exI, rowI)).catch(() => {});
   }
 }
 

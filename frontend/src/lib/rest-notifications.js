@@ -50,9 +50,28 @@ export async function ensurePermission() {
   return permission;
 }
 
+// Il plugin nativo gestisce UNA sola notifica alla volta (id costante): chi
+// programma per ultimo sostituisce chi c'era prima, per design. Ma restEndsAt
+// nella vista è per-riga: senza tener traccia lato JS di CHI possiede la
+// notifica corrente, un cancel() invocato da una riga il cui recupero è nel
+// frattempo scaduto cancellerebbe quella di un'altra riga che ha "vinto" nel
+// frattempo (vedi CRITICAL 2 nella revisione). Questo stato vive qui e non
+// nella vista perché è il modulo a conoscere e dover far rispettare
+// l'invariante "una notifica sola" — che rispecchia l'id costante lato
+// nativo — mentre SessionView tiene tutto il resto dello stato per-riga
+// (restEndsAt) che non ha nulla a che vedere con la proprietà della
+// notifica.
+let owner = null; // chiave posizionale (`${indiceEsercizio}_${indiceSerie}`) della riga proprietaria, null = nessuna
+
 /** Programma (sostituendola) l'unica notifica di fine recupero. */
-export async function schedule({ seconds, body, sessionId, exerciseIndex }) {
+export async function schedule({ seconds, body, sessionId, exerciseIndex, ownerKey }) {
   if (!isSupported()) return;
+  // La proprietà passa a questa riga già ORA, prima di attendere l'esito:
+  // lato nativo il pending precedente viene rimosso PRIMA di provare ad
+  // aggiungere il nuovo (RestTimerPlugin.schedule), quindi anche se l'add
+  // fallisse non resterebbe comunque nulla da proteggere per il vecchio
+  // proprietario.
+  owner = ownerKey;
   await RestTimer.schedule({
     seconds,
     title: 'Recupero terminato',
@@ -62,8 +81,18 @@ export async function schedule({ seconds, body, sessionId, exerciseIndex }) {
   });
 }
 
-export async function cancel() {
+/**
+ * Annulla la notifica pendente. Con `ownerKey` l'annullamento ha effetto solo
+ * se corrisponde a chi possiede la notifica corrente (righe: chiudi il
+ * recupero in anticipo / annulla la serie — non deve poter cancellare quella
+ * di un'altra riga). Senza `ownerKey` (fine allenamento) annulla comunque:
+ * a sessione conclusa nessuna notifica futura ha senso, chiunque l'abbia
+ * programmata.
+ */
+export async function cancel(ownerKey) {
   if (!isSupported()) return;
+  if (ownerKey !== undefined && ownerKey !== owner) return;
+  owner = null;
   await RestTimer.cancel();
 }
 
