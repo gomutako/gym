@@ -238,8 +238,10 @@ function onSetButton(exI, rowI) {
     startRest(exI, rowI, log.value[exI].rest_seconds);
     persist();
 
-    // Notifica di fine recupero: il permesso si chiede qui, al primo "fatto"
-    // con recupero, dove il motivo è evidente.
+    // Notifica di fine recupero. Il permesso è già stato chiesto all'apertura
+    // dell'allenamento (vedi loadSession), quindi qui `ensurePermission()`
+    // risponde dalla memoria senza mostrare nulla: resta chiamata perché è
+    // anche il modo di sapere se il permesso c'è.
     const rest = log.value[exI].rest_seconds;
     if (rest > 0) {
       const ex = log.value[exI];
@@ -401,6 +403,19 @@ async function loadSession() {
       // null e il template (che vi accede senza optional chaining) si rompe.
       index.value = 0;
       descExpanded.value = false;
+    }
+    // Permesso alle notifiche: si chiede QUI, all'apertura di un allenamento in
+    // corso, non al primo "fatto". Due ragioni. È il momento in cui la persona
+    // sta per allenarsi, quindi il motivo resta evidente, ma il dialogo non
+    // taglia in mezzo a una serie. E soprattutto: chiedendolo al "fatto", il
+    // timer a schermo partiva subito mentre la notifica veniva programmata solo
+    // alla risposta, con la durata piena — quindi la PRIMA notifica in assoluto
+    // arrivava in ritardo di quanto il dialogo era rimasto aperto. Su una
+    // sessione già completata non si chiede nulla: lì non ci sono recuperi.
+    // Non si attende l'esito: `ensurePermission()` lo memorizza, e al "fatto"
+    // risponde immediatamente.
+    if (session.value && !session.value.completed_at) {
+      restNotify.ensurePermission().catch(() => {});
     }
     if (hkSupported && session.value && !session.value.completed_at) {
       try {
