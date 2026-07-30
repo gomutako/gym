@@ -21,6 +21,7 @@ class ViewController: CAPBridgeViewController {
     override func capacitorDidLoad() {
         bridge?.registerPluginInstance(HealthKitLivePlugin())
         bridge?.registerPluginInstance(NativeTabBarPlugin())
+        bridge?.registerPluginInstance(RestTimerPlugin())
     }
 
     /// Ripristina il rimbalzo elastico di fine lista.

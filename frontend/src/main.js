@@ -12,6 +12,7 @@ import { useThemeStore } from './stores/theme';
 import { initRuntimeConfig } from './lib/runtime-config';
 import { initSupabase } from './lib/supabase';
 import { initDeepLinks } from './lib/deep-links';
+import * as restNotify from './lib/rest-notifications';
 import './style.css';
 
 const app = createApp(App);
@@ -47,6 +48,16 @@ bootstrap().then(
     initDeepLinks(router).catch((err) =>
       console.error('[avvio] universal link non agganciati:', err)
     );
+    // Tocco sulla notifica di fine recupero: riporta all'esercizio da cui è
+    // partita. Stesso principio degli universal link, sorgente diversa.
+    restNotify.onTap(({ sessionId, exerciseIndex }) => {
+      if (!sessionId) return;
+      router.push({
+        name: 'session',
+        params: { id: sessionId },
+        query: { ex: String(exerciseIndex ?? 0) },
+      });
+    });
   },
   (err) => {
     // Configurazione assente o incompleta: l'app non può funzionare. Su device

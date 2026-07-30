@@ -3,12 +3,13 @@
 // Ogni card ha le righe delle SERIE: reps effettuate + carico (kg o livello),
 // precompilate dalla volta scorsa; ogni riga si segna come eseguita e fa
 // partire un TIMER di recupero. A fine recupero la riga diventa gialla.
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue';
+import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { getSession, updateSession, deleteSession } from '@/lib/data/sessions';
 import { listExercises } from '@/lib/data/exercises';
 import ImageCarousel from '@/components/ImageCarousel.vue';
 import * as healthkit from '@/lib/healthkit';
+import * as restNotify from '@/lib/rest-notifications';
 
 // Immagini di un esercizio del catalogo: tutte (image_paths) o la sola copertina
 const exerciseImages = (ex) =>
@@ -132,6 +133,24 @@ function go(i) {
 const next = () => go(index.value + 1);
 const prev = () => go(index.value - 1);
 
+// Applica l'indice richiesto da ?ex= (tocco sulla notifica di fine recupero)
+// al carosello, clampato sul log ATTUALE. Estratta perché serve in due punti
+// — il watch subito sotto (query che cambia a vista già aperta, stessa
+// sessione) e loadSession() più in basso (sessione appena ricaricata) — ed è
+// importante che in entrambi i casi il log sia già quello giusto: applicarla
+// prima porterebbe a clampare sul log della sessione sbagliata.
+function applyExerciseFromQuery() {
+  const ex = route.query.ex;
+  if (ex !== undefined && log.value.length) {
+    go(restNotify.clampExerciseIndex(ex, log.value.length));
+  }
+}
+
+// La notifica può arrivare mentre si è già su questa sessione: lì il router non
+// rimonta nulla (stessi params), quindi il cambio di esercizio va seguito dalla
+// query invece che dal ciclo di vita del componente.
+watch(() => route.query.ex, applyExerciseFromQuery);
+
 let touchX = 0;
 function onTouchStart(e) { touchX = e.changedTouches[0].screenX; }
 function onTouchEnd(e) {
@@ -140,41 +159,55 @@ function onTouchEnd(e) {
 }
 
 // --- Timer di recupero per riga ---
-const rest = reactive({}); // key -> secondi rimanenti (0 = recupero finito)
-const intervals = {};
+// Si conserva l'ISTANTE DI FINE, non i secondi rimanenti: in background iOS
+// sospende la WebView e un contatore che scala da sé resterebbe indietro
+// rispetto alla notifica già consegnata.
+const restEndsAt = reactive({}); // key -> epoch ms di fine (0 = recupero chiuso)
+const nowTick = ref(Date.now());
+let tickInterval = null;
 const keyOf = (exI, rowI) => `${exI}_${rowI}`;
+
+function restRemaining(exI, rowI) {
+  const end = restEndsAt[keyOf(exI, rowI)];
+  if (end === undefined) return null;
+  if (end === 0) return 0;
+  return Math.max(0, Math.ceil((end - nowTick.value) / 1000));
+}
 
 function startRest(exI, rowI, seconds) {
   const k = keyOf(exI, rowI);
-  clearInterval(intervals[k]);
-  if (!seconds || seconds <= 0) { rest[k] = 0; return; } // nessun recupero -> subito pronto
-  rest[k] = seconds;
-  intervals[k] = setInterval(() => {
-    if (rest[k] > 0) rest[k] -= 1;
-    if (rest[k] <= 0) { clearInterval(intervals[k]); intervals[k] = null; }
-  }, 1000);
+  if (!seconds || seconds <= 0) { restEndsAt[k] = 0; return; } // nessun recupero -> subito pronto
+  restEndsAt[k] = Date.now() + seconds * 1000;
 }
 function clearRest(exI, rowI) {
-  const k = keyOf(exI, rowI);
-  clearInterval(intervals[k]);
-  delete rest[k];
+  delete restEndsAt[keyOf(exI, rowI)];
 }
-// Termina subito il recupero (equivale allo scadere del timer): riga gialla
+// Chiude subito il recupero (equivale allo scadere): riga gialla
 function endRest(exI, rowI) {
-  const k = keyOf(exI, rowI);
-  clearInterval(intervals[k]);
-  intervals[k] = null;
-  rest[k] = 0;
+  restEndsAt[keyOf(exI, rowI)] = 0;
 }
-// Stato riga: 'resting' (timer in corso), 'over' (recupero finito), null
+// Stato riga: 'resting' (timer in corso), 'over' (recupero finito), null (mai avviato)
 function restState(exI, rowI) {
-  const v = rest[keyOf(exI, rowI)];
-  if (v === undefined) return null;
+  const v = restRemaining(exI, rowI);
+  if (v === null) return null;
   return v > 0 ? 'resting' : 'over';
 }
 
+onMounted(() => {
+  // Un intervallo solo per la vista: aggiorna l'"adesso" da cui tutte le righe
+  // ricavano il proprio rimanente.
+  tickInterval = setInterval(() => { nowTick.value = Date.now(); }, 500);
+  // Rientrando dal background il tick può essere stato sospeso: riallinea subito.
+  document.addEventListener('visibilitychange', onVisible);
+});
+
+function onVisible() {
+  if (!document.hidden) nowTick.value = Date.now();
+}
+
 onUnmounted(() => {
-  Object.values(intervals).forEach((id) => id && clearInterval(id));
+  if (tickInterval) clearInterval(tickInterval);
+  document.removeEventListener('visibilitychange', onVisible);
   if (hkTickInterval) clearInterval(hkTickInterval);
   if (hkUnsub) hkUnsub();
   if (hkSupported) healthkit.stop();
@@ -204,13 +237,44 @@ function onSetButton(exI, rowI) {
     row.done_at = new Date().toISOString();
     startRest(exI, rowI, log.value[exI].rest_seconds);
     persist();
+
+    // Notifica di fine recupero. Il permesso è già stato chiesto all'apertura
+    // dell'allenamento (vedi loadSession), quindi qui `ensurePermission()`
+    // risponde dalla memoria senza mostrare nulla: resta chiamata perché è
+    // anche il modo di sapere se il permesso c'è.
+    const rest = log.value[exI].rest_seconds;
+    if (rest > 0) {
+      const ex = log.value[exI];
+      // Il dialogo di sistema per il permesso può restare aperto per secoli
+      // rispetto a un tap: se nel frattempo questa riga viene chiusa in anticipo
+      // o annullata, restEndsAt cambia (nuovo istante o azzerato). Si ricontrolla
+      // com'era AL MOMENTO di programmare, altrimenti un permesso concesso in
+      // ritardo farebbe partire una notifica "fantasma" per un recupero non più
+      // attivo.
+      const restEndAtSchedule = restEndsAt[keyOf(exI, rowI)];
+      restNotify.ensurePermission().then((ok) => {
+        if (!ok || restEndsAt[keyOf(exI, rowI)] !== restEndAtSchedule) return;
+        restNotify.schedule({
+          seconds: rest,
+          body: restNotify.restBody(
+            catalogById.value[ex.exercise_id]?.name, rowI + 1, ex.sets_log.length),
+          sessionId: session.value.id,
+          exerciseIndex: exI,
+          ownerKey: keyOf(exI, rowI),
+        }).catch(() => { /* la notifica è un di più: non blocca l'allenamento */ });
+      });
+    }
   } else if (state === 'resting') {
     endRest(exI, rowI); // done resta true, già persistito
+    // Annulla solo se QUESTA riga possiede ancora la notifica pendente: nel
+    // frattempo un'altra riga può averla già sostituita (vedi rest-notifications.js).
+    restNotify.cancel(keyOf(exI, rowI)).catch(() => {});
   } else {
     row.done = false;
     row.done_at = null;
     clearRest(exI, rowI);
     persist();
+    restNotify.cancel(keyOf(exI, rowI)).catch(() => {});
   }
 }
 
@@ -258,6 +322,7 @@ async function complete() {
       completed_at: new Date().toISOString(),
       ...(biometrics_json ? { biometrics_json } : {}),
     });
+    restNotify.cancel().catch(() => {});
     router.push({ name: 'training' });
   } catch (e) {
     error.value = e.message;
@@ -288,12 +353,70 @@ async function remove() {
   }
 }
 
-onMounted(async () => {
+// Carica sessione + catalogo per l'id CORRENTE della rotta e (ri)avvia il
+// monitoraggio HealthKit se la sessione è ancora in corso. Estratta in una
+// funzione — anziché vivere solo dentro onMounted — perché va richiamata
+// anche quando cambia route.params.id: il tocco su una notifica di
+// un'ALTRA sessione (es. mentre si sta guardando lo storico di una sessione
+// diversa) naviga con lo stesso name 'session', cambiando solo l'id, quindi
+// il router NON rimonta il componente e onMounted da solo non riparte —
+// senza questa funzione richiamabile a parte, la vista resterebbe con i dati
+// della sessione vecchia (vedi watch su route.params.id più sotto).
+async function loadSession() {
+  loading.value = true;
+  error.value = '';
+  // Il monitoraggio HealthKit eventualmente già attivo (listener + intervallo
+  // di tick) appartiene alla sessione PRECEDENTE: va fermato PRIMA di
+  // ricaricare, altrimenti i suoi campioni continuerebbero ad accumularsi nel
+  // badge della sessione appena aperta (liveKcal è una somma progressiva). Su
+  // un mount fresco hkUnsub/hkTickInterval sono ancora null, quindi qui non
+  // succede nulla: lo stesso codice copre "prima apertura" e "cambio sessione".
+  if (hkTickInterval) { clearInterval(hkTickInterval); hkTickInterval = null; }
+  if (hkUnsub) { hkUnsub(); hkUnsub = null; }
+  if (hkSupported) {
+    try { await healthkit.stop(); } catch { /* nessun monitoraggio attivo: ignorabile */ }
+  }
+  liveHR.value = null;
+  liveKcal.value = null;
+  lastSampleAt.value = null;
+  hkError.value = '';
+  // Le chiavi di restEndsAt sono POSIZIONALI (`${indiceEsercizio}_${indiceSerie}`),
+  // non legate all'id della sessione: senza svuotarla, una riga nella stessa
+  // posizione della sessione nuova erediterebbe il recupero (e il countdown
+  // giallo) di quella vecchia, anche se in quella nuova non è mai stata
+  // segnata. Su un mount fresco è già vuota, quindi qui non cambia nulla.
+  Object.keys(restEndsAt).forEach((k) => delete restEndsAt[k]);
   try {
     [session.value, catalog.value] = await Promise.all([
       getSession(route.params.id),
       listExercises(),
     ]);
+    // ?ex=<indice>: arriva dal tocco sulla notifica di fine recupero. Va
+    // applicato SOLO ORA che session/log corrispondono alla sessione appena
+    // caricata — applicarlo prima del fetch clamperebbe sul log sbagliato.
+    if (route.query.ex !== undefined) {
+      applyExerciseFromQuery();
+    } else {
+      // Nessuna query: si riparte dal primo esercizio. Senza questo reset,
+      // passando a una sessione diversa l'indice resterebbe quello della
+      // sessione precedente — se il nuovo log è più corto, `current` diventa
+      // null e il template (che vi accede senza optional chaining) si rompe.
+      index.value = 0;
+      descExpanded.value = false;
+    }
+    // Permesso alle notifiche: si chiede QUI, all'apertura di un allenamento in
+    // corso, non al primo "fatto". Due ragioni. È il momento in cui la persona
+    // sta per allenarsi, quindi il motivo resta evidente, ma il dialogo non
+    // taglia in mezzo a una serie. E soprattutto: chiedendolo al "fatto", il
+    // timer a schermo partiva subito mentre la notifica veniva programmata solo
+    // alla risposta, con la durata piena — quindi la PRIMA notifica in assoluto
+    // arrivava in ritardo di quanto il dialogo era rimasto aperto. Su una
+    // sessione già completata non si chiede nulla: lì non ci sono recuperi.
+    // Non si attende l'esito: `ensurePermission()` lo memorizza, e al "fatto"
+    // risponde immediatamente.
+    if (session.value && !session.value.completed_at) {
+      restNotify.ensurePermission().catch(() => {});
+    }
     if (hkSupported && session.value && !session.value.completed_at) {
       try {
         const auth = await healthkit.requestAuth();
@@ -327,7 +450,15 @@ onMounted(async () => {
   } finally {
     loading.value = false;
   }
-});
+}
+
+onMounted(loadSession);
+
+// Cambio di sessione a vista già montata (tocco su notifica di un'ALTRA
+// sessione, o comunque una navigazione che cambia solo l'id nell'URL): senza
+// questo watch onMounted non riparte e la vista resterebbe sulla sessione
+// vecchia — vedi commento su loadSession().
+watch(() => route.params.id, loadSession);
 </script>
 
 <template>
@@ -520,7 +651,7 @@ onMounted(async () => {
                       @click="onSetButton(index, ri)"
                     >
                       <template v-if="row.done && restState(index, ri) === 'resting'">
-                        ⏱ {{ fmtTimer(rest[`${index}_${ri}`]) }}
+                        ⏱ {{ fmtTimer(restRemaining(index, ri)) }}
                       </template>
                       <template v-else-if="row.done">✓ fatto</template>
                       <template v-else>Fatto</template>
