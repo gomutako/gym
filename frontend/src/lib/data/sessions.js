@@ -47,6 +47,66 @@ export async function getSession(id) {
 }
 
 /**
+ * Costruisce lo snapshot delle serie di una giornata, con reps e carichi
+ * precompilati dall'ultima sessione completata che conteneva l'esercizio.
+ *
+ * Estratta da `startSession` perché serve anche a preparare la cache del
+ * Watch: al polso i valori devono essere GIÀ risolti — il Watch non ha
+ * credenziali Supabase e non può calcolarli.
+ */
+export async function buildSnapshotLog(dayExercises, memberId) {
+  const exerciseIds = [...new Set(dayExercises.map((e) => e.exercise_id).filter(Boolean))];
+
+  const metaById = {};
+  if (exerciseIds.length) {
+    const catalog = unwrap(
+      await db().from('exercises').select('id, load_type, has_incline').in('id', exerciseIds)
+    );
+    for (const c of catalog || []) metaById[c.id] = c;
+  }
+
+  const past = unwrap(
+    await db()
+      .from('workout_sessions')
+      .select('exercises_log, completed_at')
+      .eq('member_id', memberId)
+      .not('completed_at', 'is', null)
+      .order('completed_at', { ascending: false })
+      .limit(PAST_SESSIONS_LOOKBACK)
+  );
+
+  const lastSetsByExercise = {};
+  for (const session of past || []) {
+    for (const ex of session.exercises_log || []) {
+      if (ex.exercise_id && !lastSetsByExercise[ex.exercise_id]) {
+        lastSetsByExercise[ex.exercise_id] = ex.sets_log || [];
+      }
+    }
+  }
+
+  return dayExercises.map((e) => {
+    const prev = lastSetsByExercise[e.exercise_id] || [];
+    const nSets = Math.max(1, e.sets || 1);
+    const hasIncline = metaById[e.exercise_id]?.has_incline || false;
+    const sets_log = Array.from({ length: nSets }, (_, i) => ({
+      uid: crypto.randomUUID(),
+      reps: prev[i]?.reps ?? e.reps ?? null,
+      load: prev[i]?.load ?? null,
+      ...(hasIncline ? { incline: prev[i]?.incline ?? null } : {}),
+      done: false,
+    }));
+    return {
+      exercise_id: e.exercise_id,
+      target_reps: e.reps ?? null,
+      rest_seconds: e.rest_seconds ?? 0,
+      load_type: metaById[e.exercise_id]?.load_type || 'weight',
+      has_incline: hasIncline,
+      sets_log,
+    };
+  });
+}
+
+/**
  * Avvia una sessione sulla giornata `dayIndex` della scheda `workoutId`.
  *
  * Fa uno SNAPSHOT della giornata: titolo scheda, nome giornata ed esercizi
@@ -68,63 +128,9 @@ export async function startSession(workoutId, dayIndex, memberId) {
   if (!day) throw new Error('Giornata non valida');
 
   const dayExercises = day.exercises || [];
-  const exerciseIds = [...new Set(dayExercises.map((e) => e.exercise_id).filter(Boolean))];
 
-  // 2. Metadati dal catalogo: load_type (kg o livello) e has_incline (pendenza %)
-  const metaById = {};
-  if (exerciseIds.length) {
-    const catalog = unwrap(
-      await db().from('exercises').select('id, load_type, has_incline').in('id', exerciseIds)
-    );
-    for (const c of catalog || []) metaById[c.id] = c;
-  }
-
-  // 3. Ultimo carico usato per ciascun esercizio, dalle sessioni COMPLETATE
-  const past = unwrap(
-    await db()
-      .from('workout_sessions')
-      .select('exercises_log, completed_at')
-      .eq('member_id', memberId)
-      .not('completed_at', 'is', null)
-      .order('completed_at', { ascending: false })
-      .limit(PAST_SESSIONS_LOOKBACK)
-  );
-
-  const lastSetsByExercise = {};
-  for (const session of past || []) {
-    for (const ex of session.exercises_log || []) {
-      // le sessioni sono già ordinate dalla più recente: il primo trovato vince
-      if (ex.exercise_id && !lastSetsByExercise[ex.exercise_id]) {
-        lastSetsByExercise[ex.exercise_id] = ex.sets_log || [];
-      }
-    }
-  }
-
-  // 4. Snapshot: una riga per serie, con reps e carico precompilati
-  const exercises_log = dayExercises.map((e) => {
-    const prev = lastSetsByExercise[e.exercise_id] || [];
-    const nSets = Math.max(1, e.sets || 1);
-    const hasIncline = metaById[e.exercise_id]?.has_incline || false;
-    const sets_log = Array.from({ length: nSets }, (_, i) => ({
-      // Identità STABILE della serie. Il protocollo Watch↔iPhone referenzia
-      // sempre uid e mai la posizione: addSet/removeSet sull'iPhone spostano
-      // gli indici, e un "fatto" in volo atterrerebbe sulla riga sbagliata.
-      uid: crypto.randomUUID(),
-      reps: prev[i]?.reps ?? e.reps ?? null,
-      load: prev[i]?.load ?? null,
-      // la pendenza esiste solo per gli esercizi che la prevedono (es. tapis roulant)
-      ...(hasIncline ? { incline: prev[i]?.incline ?? null } : {}),
-      done: false,
-    }));
-    return {
-      exercise_id: e.exercise_id,
-      target_reps: e.reps ?? null,
-      rest_seconds: e.rest_seconds ?? 0,
-      load_type: metaById[e.exercise_id]?.load_type || 'weight',
-      has_incline: hasIncline,
-      sets_log,
-    };
-  });
+  // 2-4. Metadati dal catalogo, ultimo carico usato e snapshot delle serie
+  const exercises_log = await buildSnapshotLog(dayExercises, memberId);
 
   return unwrap(
     await db()

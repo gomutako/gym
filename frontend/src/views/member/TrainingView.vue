@@ -6,6 +6,7 @@ import { storeToRefs } from 'pinia';
 import { useAuthStore } from '@/stores/auth';
 import { listWorkoutsForMember, setWorkoutActive } from '@/lib/data/workouts';
 import { listOwnSessions, startSession } from '@/lib/data/sessions';
+import { pushCatalog } from '@/lib/watch-catalog';
 import Combobox from '@/components/Combobox.vue';
 
 const router = useRouter();
@@ -298,6 +299,11 @@ async function load() {
     error.value = e.message;
   } finally {
     loading.value = false;
+    // La cache del Watch si aggiorna qui e non altrove: è l'unico punto in cui
+    // il member ha appena visto le proprie schede, quindi ciò che finisce al
+    // polso è ciò che ha davanti agli occhi. Non si attende e non si propaga
+    // l'errore: il Watch è opzionale e non deve ritardare la schermata.
+    pushCatalog(user.value.id).catch(() => {});
   }
 }
 
