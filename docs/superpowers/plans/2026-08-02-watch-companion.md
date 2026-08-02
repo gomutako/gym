@@ -41,15 +41,34 @@ Questo task esiste per far fallire il progetto **subito** se deve fallire. Non �
 
 - [ ] **Step 1: Aggiungere il target in Xcode**
 
-Aprire `frontend/ios/App/App.xcworkspace`, poi File → New → Target → watchOS → **App**. Impostare:
+Aprire `frontend/ios/App/App.xcworkspace`.
+
+⚠️ **Selezionare prima l'icona blu del progetto `App` nel Project Navigator.** Il workspace
+contiene anche `Pods`, e il target finisce nel progetto selezionato: con `Pods` attivo la
+tendina dei companion resta vuota (`None` è l'unica voce) e *Finish* non si abilita, senza
+che nulla spieghi il perché.
+
+Poi File → New → Target → watchOS → **App**. Impostare:
 
 - Product Name: `PalladeWatch`
-- Interface: SwiftUI, Language: Swift
-- Bundle Identifier: `it.pallade.app.watchkitapp`
-- **Deselezionare** "Include Notification Scene"
+- Team: il team personale (`7M9683Z95M`)
+- **Watch App for Existing iOS App** → nella tendina scegliere **`App`**
+- Testing System: **XCTest for Unit and UI Tests** — crea il bundle di test che serve al
+  Task 9. Scegliendo *Swift Testing* i test di quel task andrebbero riscritti con `@Test` e
+  `#expect`, quindi non è intercambiabile.
 - Alla domanda "Activate scheme?" rispondere Activate.
 
-Xcode crea la cartella `PalladeWatch Watch App/`. Verificare in target → General che *Minimum Deployments* sia **watchOS 10.0** e in *Signing & Capabilities* che il Team sia `7M9683Z95M` con *Automatically manage signing* attivo.
+Nota: nelle versioni recenti di Xcode non esiste più la casella "Include Notification
+Scene", e l'interfaccia è SwiftUI senza doverlo dichiarare.
+
+Xcode crea la cartella `PalladeWatch Watch App/`. Poi verificare, sul nuovo target:
+
+- **General → Identity → Bundle Identifier = `it.pallade.app.watchkitapp`.** L'anteprima nel
+  dialogo di creazione mostra `com.yourcompany.PalladeWatch` e **non si aggiorna** quando si
+  aggancia il companion: va controllato dopo. Se è rimasto sbagliato, correggerlo qui e nel
+  target di test — dopo la pubblicazione non è più modificabile.
+- **General → Minimum Deployments = watchOS 10.0**
+- **Signing & Capabilities** → Team `7M9683Z95M`, *Automatically manage signing* attivo
 
 - [ ] **Step 2: Dichiarare HealthKit e il background di allenamento**
 
@@ -462,7 +481,12 @@ Atteso: `ERR_MODULE_NOT_FOUND` su `session-merge.js`.
  *   all'infinito.
  */
 export function mergeSetDone(exercisesLog, event) {
-  if (!Array.isArray(exercisesLog) || !event?.uid || !event?.done_at) {
+  const eventTime = event?.done_at ? Date.parse(event.done_at) : NaN;
+  // Un `done_at` mancante o non parsabile viene scartato qui: se passasse,
+  // finirebbe scritto in una riga come fatto compiuto e nessun evento
+  // successivo potrebbe più correggerlo (la riga "done" vincerebbe sempre
+  // il confronto sottostante, valori corrotti compresi).
+  if (!Array.isArray(exercisesLog) || !event?.uid || Number.isNaN(eventTime)) {
     return { log: exercisesLog, changed: false };
   }
 
@@ -473,11 +497,18 @@ export function mergeSetDone(exercisesLog, event) {
     if (i < 0) return ex;
 
     const row = sets[i];
-    // Regola 2: chi è arrivato prima nel tempo REALE vince, non chi ha
-    // parlato per ultimo. Date.parse su una stringa non valida dà NaN, e
-    // ogni confronto con NaN è falso: un evento malformato non vince mai.
-    if (row.done && !(Date.parse(event.done_at) < Date.parse(row.done_at))) {
-      return ex;
+    if (row.done) {
+      const rowTime = Date.parse(row.done_at);
+      // Regola 2: chi è arrivato prima nel tempo REALE vince, non chi ha
+      // parlato per ultimo. L'evento qui è già garantito valido dalla
+      // guardia d'ingresso sopra. Una riga "done" con `done_at` mancante o
+      // non parsabile (`rowTime` NaN) non ha invece nessuna pretesa
+      // difendibile di vincere: se la lasciassimo vincere per il solito
+      // "confronto con NaN è falso", una riga corrotta resterebbe bloccata
+      // per sempre. Un evento valido la corregge sempre.
+      if (!Number.isNaN(rowTime) && !(eventTime < rowTime)) {
+        return ex;
+      }
     }
 
     changed = true;
@@ -507,7 +538,7 @@ export function mergeSetDone(exercisesLog, event) {
 cd /Users/gomutako/Developer/gym && node scripts/tmp-merge.mjs
 ```
 
-Atteso: undici righe `OK` e `TUTTI OK`, uscita 0.
+Atteso: tredici righe `OK` e `TUTTI OK`, uscita 0.
 
 - [ ] **Step 5: Rimuovere lo script e committare**
 
@@ -2217,9 +2248,12 @@ extension ISO8601DateFormatter {
 
 È l'unico modo di sapere che le due implementazioni concordano. Senza, una divergenza si manifesta come una serie che sparisce, mesi dopo, su un solo dispositivo.
 
-In Xcode: File → New → Target → watchOS → **Unit Testing Bundle**, Product Name `PalladeWatchTests`, Target to be Tested: `PalladeWatch Watch App`.
+Il bundle di test esiste già: è stato creato dal Task 1 scegliendo *XCTest for Unit and UI
+Tests*. Individuarne la cartella nel progetto (si chiamerà `PalladeWatch Watch AppTests` o
+simile, a seconda di come Xcode l'ha nominata) e usarla al posto del percorso qui sotto,
+adeguando di conseguenza il nome del modulo in `@testable import`.
 
-Creare `frontend/ios/App/PalladeWatchTests/SessionMergeTests.swift`:
+Creare `SessionMergeTests.swift` dentro quella cartella:
 
 ```swift
 import XCTest
