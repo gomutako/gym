@@ -31,7 +31,12 @@
  *   all'infinito.
  */
 export function mergeSetDone(exercisesLog, event) {
-  if (!Array.isArray(exercisesLog) || !event?.uid || !event?.done_at) {
+  const eventTime = event?.done_at ? Date.parse(event.done_at) : NaN;
+  // Un `done_at` mancante o non parsabile viene scartato qui: se passasse,
+  // finirebbe scritto in una riga come fatto compiuto e nessun evento
+  // successivo potrebbe più correggerlo (la riga "done" vincerebbe sempre
+  // il confronto sottostante, valori corrotti compresi).
+  if (!Array.isArray(exercisesLog) || !event?.uid || Number.isNaN(eventTime)) {
     return { log: exercisesLog, changed: false };
   }
 
@@ -42,11 +47,18 @@ export function mergeSetDone(exercisesLog, event) {
     if (i < 0) return ex;
 
     const row = sets[i];
-    // Regola 2: chi è arrivato prima nel tempo REALE vince, non chi ha
-    // parlato per ultimo. Date.parse su una stringa non valida dà NaN, e
-    // ogni confronto con NaN è falso: un evento malformato non vince mai.
-    if (row.done && !(Date.parse(event.done_at) < Date.parse(row.done_at))) {
-      return ex;
+    if (row.done) {
+      const rowTime = Date.parse(row.done_at);
+      // Regola 2: chi è arrivato prima nel tempo REALE vince, non chi ha
+      // parlato per ultimo. L'evento qui è già garantito valido dalla
+      // guardia d'ingresso sopra. Una riga "done" con `done_at` mancante o
+      // non parsabile (`rowTime` NaN) non ha invece nessuna pretesa
+      // difendibile di vincere: se la lasciassimo vincere per il solito
+      // "confronto con NaN è falso", una riga corrotta resterebbe bloccata
+      // per sempre. Un evento valido la corregge sempre.
+      if (!Number.isNaN(rowTime) && !(eventTime < rowTime)) {
+        return ex;
+      }
     }
 
     changed = true;
