@@ -295,17 +295,20 @@ async function load() {
     // Preseleziona la scheda "in uso", se presente
     const active = schede.value.find((s) => s.is_active);
     if (active && !selectedSchedaId.value) selectedSchedaId.value = active.id;
+    // La cache del Watch si aggiorna qui, SOLO sul percorso di successo: è
+    // l'unico punto in cui il member ha appena visto le proprie schede,
+    // quindi ciò che finisce al polso è ciò che ha davanti agli occhi. Non si
+    // attende e non si propaga l'errore: il Watch è opzionale e non deve
+    // ritardare la schermata. Va chiamata QUI e non in un `finally`: se la
+    // lettura fallisce non sappiamo se il member ha davvero zero schede o se
+    // semplicemente non siamo riusciti a saperlo, e spingere un array vuoto
+    // in quel caso cancellerebbe l'ultima cache buona sul Watch per un
+    // problema di rete sul telefono.
+    pushCatalog(user.value.id, schede.value).catch(() => {});
   } catch (e) {
     error.value = e.message;
   } finally {
     loading.value = false;
-    // La cache del Watch si aggiorna qui e non altrove: è l'unico punto in cui
-    // il member ha appena visto le proprie schede, quindi ciò che finisce al
-    // polso è ciò che ha davanti agli occhi. Non si attende e non si propaga
-    // l'errore: il Watch è opzionale e non deve ritardare la schermata.
-    // schede.value è già stato letto qui sopra: si passa quello, non lo si
-    // rilegge dentro pushCatalog.
-    pushCatalog(user.value.id, schede.value).catch(() => {});
   }
 }
 
