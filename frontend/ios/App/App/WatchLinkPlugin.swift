@@ -9,6 +9,13 @@
 //
 // Il buffer è anche su disco, non solo in memoria: iOS può terminare il
 // processo fra un messaggio e l'apertura dell'app.
+//
+// Array in memoria e file sono UNA sola risorsa, non due tenute in sync a
+// mano: append+scrittura e svuotamento+cancellazione girano sulla stessa
+// coda seriale, come unità indivisibili nell'ordine di arrivo. Senza
+// questo, un arrivo concorrente a un drain potrebbe far resuscitare sul
+// disco un buffer già consegnato, o lasciarlo troncato a metà scrittura —
+// esattamente nella finestra (processo ucciso) per cui il buffer esiste.
 // =====================================================
 import Foundation
 import Capacitor
@@ -23,7 +30,12 @@ public class WatchLinkPlugin: CAPPlugin, WCSessionDelegate {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("watchlink-buffer.json")
     }()
-    private let lock = NSLock()
+    /// Unica proprietaria di `buffer` e di `bufferURL`: ogni lettura o
+    /// scrittura di entrambi passa da qui, come blocco indivisibile
+    /// nell'ordine di sottomissione. Una `NSLock` non basterebbe: proteggeva
+    /// solo l'array, lasciando l'I/O su disco fuori dalla sezione critica e
+    /// quindi riordinabile rispetto a un drain concorrente.
+    private let queue = DispatchQueue(label: "it.pallade.watchlink.buffer")
 
     override public func load() {
         loadBuffer()
@@ -125,33 +137,58 @@ public class WatchLinkPlugin: CAPPlugin, WCSessionDelegate {
 
     // MARK: - Buffer
 
+    /// Append e scrittura sono un'unica chiusura sottomessa alla coda: o
+    /// succedono entrambe prima del prossimo `drain()` in coda, o dopo —
+    /// mai a metà, mai nell'ordine sbagliato.
     private func store(_ message: [String: Any]) {
-        lock.lock()
-        buffer.append(message)
-        // Un allenamento lungo con l'app iPhone mai aperta non deve far
-        // crescere il file senza limite.
-        if buffer.count > 500 { buffer.removeFirst(buffer.count - 500) }
-        let snapshot = buffer
-        lock.unlock()
-        if let data = try? JSONSerialization.data(withJSONObject: snapshot) {
-            try? data.write(to: bufferURL, options: .atomic)
+        queue.async {
+            self.buffer.append(message)
+            // Un allenamento lungo con l'app iPhone mai aperta non deve far
+            // crescere il file senza limite.
+            if self.buffer.count > 500 { self.buffer.removeFirst(self.buffer.count - 500) }
+            self.persist()
         }
     }
 
+    /// Deve girare solo da dentro `queue`. Un payload non serializzabile in
+    /// JSON (es. `NSDate`/`NSData`, valori legali in un dizionario
+    /// `WCSession` ma non per `JSONSerialization`) non deve far fallire
+    /// l'intera scrittura: gli altri messaggi restano persistibili, e lo
+    /// scarto va segnalato ad alta voce — un fallimento silenzioso qui è
+    /// peggio di un messaggio perso, perché nessuno saprebbe di doverlo
+    /// cercare.
+    private func persist() {
+        let persistable = buffer.filter { message in
+            let isValid = JSONSerialization.isValidJSONObject(message)
+            if !isValid {
+                let type = message["type"] as? String ?? "sconosciuto"
+                CAPLog.print("⚡️ WatchLink: payload non serializzabile in JSON scartato dal buffer su disco (type=\(type))")
+            }
+            return isValid
+        }
+        guard let data = try? JSONSerialization.data(withJSONObject: persistable) else { return }
+        try? data.write(to: bufferURL, options: .atomic)
+    }
+
+    /// Sincrona apposta: il bridge Capacitor resta in attesa del valore di
+    /// ritorno, quindi svuotamento in memoria e cancellazione su disco
+    /// devono completarsi prima che `getState` possa rispondere.
     private func drain() -> [[String: Any]] {
-        lock.lock()
-        let out = buffer
-        buffer = []
-        lock.unlock()
-        try? FileManager.default.removeItem(at: bufferURL)
-        return out
+        queue.sync {
+            let out = buffer
+            buffer = []
+            try? FileManager.default.removeItem(at: bufferURL)
+            return out
+        }
     }
 
     private func loadBuffer() {
-        guard let data = try? Data(contentsOf: bufferURL),
-              let items = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
-        else { return }
-        lock.lock(); buffer = items; lock.unlock()
+        queue.sync {
+            guard let data = try? Data(contentsOf: bufferURL),
+                  let items = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+            else { return }
+            buffer = items
+        }
     }
 
     // MARK: - WCSessionDelegate
