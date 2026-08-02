@@ -139,6 +139,55 @@ export async function startSession(workoutId, dayIndex, memberId) {
 }
 
 /**
+ * Materializza una sessione già iniziata altrove (tipicamente sul Watch).
+ *
+ * A differenza di `startSession` NON precompila i carichi: lo snapshot arriva
+ * già risolto. Rifare qui il calcolo farebbe cambiare sotto gli occhi
+ * dell'utente numeri che aveva appena confermato al polso.
+ *
+ * È IDEMPOTENTE tramite `client_session_id`: il buffer del plugin nativo può
+ * essere svuotato due volte — succede se l'app viene uccisa a metà — e due
+ * sessioni gemelle sarebbero indistinguibili nello storico.
+ */
+export async function createSessionFromSnapshot(snapshot, memberId) {
+  if (!snapshot?.client_session_id) {
+    throw new Error('Sessione senza identificativo: impossibile importarla');
+  }
+
+  // La riga può già esistere: l'indice unico la garantisce singola, quindi
+  // trovarla è sufficiente e non c'è corsa da difendere.
+  const existing = unwrap(
+    await db()
+      .from('workout_sessions')
+      .select('*')
+      .eq('member_id', memberId)
+      .eq('client_session_id', snapshot.client_session_id)
+      .maybeSingle()
+  );
+  if (existing) return existing;
+
+  return unwrap(
+    await db()
+      .from('workout_sessions')
+      .insert({
+        member_id: memberId,
+        client_session_id: snapshot.client_session_id,
+        workout_id: snapshot.workout_id ?? null,
+        workout_title: snapshot.workout_title ?? null,
+        day_index: snapshot.day_index ?? null,
+        day_name: snapshot.day_name ?? null,
+        exercises_log: snapshot.exercises_log ?? [],
+        // L'allenamento è cominciato al polso, non adesso: il default now()
+        // della colonna falserebbe durata e finestra dei biometrici.
+        started_at: snapshot.started_at ?? new Date().toISOString(),
+      })
+      .select()
+      .single(),
+    MESSAGES
+  );
+}
+
+/**
  * Aggiorna il log degli esercizi, i dati biometrici e/o completa la sessione.
  * Passa `completed_at` con un timestamp ISO per chiudere l'allenamento, `null`
  * per riaprirlo.
