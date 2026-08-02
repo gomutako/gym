@@ -20,6 +20,11 @@ const MESSAGES = {
   [PG.NO_SINGLE_ROW]: 'Sessione non trovata (o non è tua)',
   [PG.NOT_AUTHORIZED]: 'Non puoi modificare questa sessione',
   [PG.INVALID_VALUE]: 'I dati della sessione non hanno la forma attesa',
+  // Fallback per createSessionFromSnapshot: se due invii concorrenti dello
+  // stesso client_session_id perdono entrambi la corsa E la rilettura del
+  // vincitore fallisce (caso patologico, vedi sotto), questo è il messaggio
+  // che arriva al chiamante invece del testo Postgres grezzo.
+  [PG.UNIQUE_VIOLATION]: 'Sessione già registrata da un invio concorrente',
 };
 
 /** Le proprie sessioni, dalla più recente (calendario e storico). */
@@ -147,44 +152,73 @@ export async function startSession(workoutId, dayIndex, memberId) {
  *
  * È IDEMPOTENTE tramite `client_session_id`: il buffer del plugin nativo può
  * essere svuotato due volte — succede se l'app viene uccisa a metà — e due
- * sessioni gemelle sarebbero indistinguibili nello storico.
+ * sessioni gemelle sarebbero indistinguibili nello storico. L'idempotenza
+ * regge anche in corsa: un handler di background delivery e un resume in
+ * foreground possono drenare il buffer del Watch nello stesso istante ed
+ * entrambi superare la SELECT iniziale prima che l'uno o l'altro abbia
+ * scritto. A quel punto è l'indice unico parziale su
+ * (member_id, client_session_id) a decidere chi vince l'INSERT; chi perde
+ * intercetta la violazione (23505) e rilegge la riga vincente invece di
+ * propagare l'errore Postgres — per il chiamante l'esito è lo stesso di
+ * quando la SELECT iniziale l'aveva già trovata.
  */
 export async function createSessionFromSnapshot(snapshot, memberId) {
   if (!snapshot?.client_session_id) {
     throw new Error('Sessione senza identificativo: impossibile importarla');
   }
+  // Un orario di inizio mancante o non valido non si sostituisce con "adesso":
+  // sarebbe lo stesso difetto del default now() della colonna, che falserebbe
+  // durata e finestra dei biometrici. Meglio rifiutare l'importazione che
+  // salvare un dato silenziosamente sbagliato.
+  if (!snapshot.started_at || Number.isNaN(new Date(snapshot.started_at).getTime())) {
+    throw new Error('Sessione senza orario di inizio valido: impossibile importarla');
+  }
 
-  // La riga può già esistere: l'indice unico la garantisce singola, quindi
-  // trovarla è sufficiente e non c'è corsa da difendere.
-  const existing = unwrap(
-    await db()
-      .from('workout_sessions')
-      .select('*')
-      .eq('member_id', memberId)
-      .eq('client_session_id', snapshot.client_session_id)
-      .maybeSingle()
-  );
+  async function findExisting() {
+    return unwrap(
+      await db()
+        .from('workout_sessions')
+        .select('*')
+        .eq('member_id', memberId)
+        .eq('client_session_id', snapshot.client_session_id)
+        .maybeSingle()
+    );
+  }
+
+  const existing = await findExisting();
   if (existing) return existing;
 
-  return unwrap(
-    await db()
-      .from('workout_sessions')
-      .insert({
-        member_id: memberId,
-        client_session_id: snapshot.client_session_id,
-        workout_id: snapshot.workout_id ?? null,
-        workout_title: snapshot.workout_title ?? null,
-        day_index: snapshot.day_index ?? null,
-        day_name: snapshot.day_name ?? null,
-        exercises_log: snapshot.exercises_log ?? [],
-        // L'allenamento è cominciato al polso, non adesso: il default now()
-        // della colonna falserebbe durata e finestra dei biometrici.
-        started_at: snapshot.started_at ?? new Date().toISOString(),
-      })
-      .select()
-      .single(),
-    MESSAGES
-  );
+  try {
+    return unwrap(
+      await db()
+        .from('workout_sessions')
+        .insert({
+          member_id: memberId,
+          client_session_id: snapshot.client_session_id,
+          workout_id: snapshot.workout_id ?? null,
+          workout_title: snapshot.workout_title ?? null,
+          day_index: snapshot.day_index ?? null,
+          day_name: snapshot.day_name ?? null,
+          exercises_log: snapshot.exercises_log ?? [],
+          // L'allenamento è cominciato al polso, non adesso: validato sopra,
+          // quindi qui è garantito presente e valido.
+          started_at: snapshot.started_at,
+        })
+        .select()
+        .single(),
+      MESSAGES
+    );
+  } catch (err) {
+    if (err.code !== PG.UNIQUE_VIOLATION) throw err;
+    // Corsa persa: un'altra chiamata concorrente per lo stesso
+    // client_session_id ha vinto l'INSERT. La riga esiste già, va solo riletta.
+    const winner = await findExisting();
+    if (winner) return winner;
+    // Non dovrebbe accadere — la riga che ha causato il conflitto esiste per
+    // definizione — ma se la rilettura non la trova comunque non si propaga
+    // il testo Postgres grezzo: `unwrap` sopra l'ha già tradotto con MESSAGES.
+    throw err;
+  }
 }
 
 /**
