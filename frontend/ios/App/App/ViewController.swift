@@ -22,6 +22,7 @@ class ViewController: CAPBridgeViewController {
         bridge?.registerPluginInstance(HealthKitLivePlugin())
         bridge?.registerPluginInstance(NativeTabBarPlugin())
         bridge?.registerPluginInstance(RestTimerPlugin())
+        bridge?.registerPluginInstance(WatchLinkPlugin())
     }
 
     /// Ripristina il rimbalzo elastico di fine lista.

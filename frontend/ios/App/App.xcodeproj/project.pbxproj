@@ -23,6 +23,8 @@
 		C1A70B0100000000000000A2 /* NativeTabBarPlugin.m in Sources */ = {isa = PBXBuildFile; fileRef = C1A70B0100000000000000A4 /* NativeTabBarPlugin.m */; };
 		C1A70B0200000000000000B1 /* RestTimerPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A70B0200000000000000B3 /* RestTimerPlugin.swift */; };
 		C1A70B0200000000000000B2 /* RestTimerPlugin.m in Sources */ = {isa = PBXBuildFile; fileRef = C1A70B0200000000000000B4 /* RestTimerPlugin.m */; };
+		C1A70B0300000000000000C1 /* WatchLinkPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A70B0300000000000000C3 /* WatchLinkPlugin.swift */; };
+		C1A70B0300000000000000C2 /* WatchLinkPlugin.m in Sources */ = {isa = PBXBuildFile; fileRef = C1A70B0300000000000000C4 /* WatchLinkPlugin.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -86,6 +88,8 @@
 		C1A70B0100000000000000A4 /* NativeTabBarPlugin.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = NativeTabBarPlugin.m; sourceTree = "<group>"; };
 		C1A70B0200000000000000B3 /* RestTimerPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RestTimerPlugin.swift; sourceTree = "<group>"; };
 		C1A70B0200000000000000B4 /* RestTimerPlugin.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = RestTimerPlugin.m; sourceTree = "<group>"; };
+		C1A70B0300000000000000C3 /* WatchLinkPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WatchLinkPlugin.swift; sourceTree = "<group>"; };
+		C1A70B0300000000000000C4 /* WatchLinkPlugin.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = WatchLinkPlugin.m; sourceTree = "<group>"; };
 		FC68EB0AF532CFC21C3344DD /* Pods-App.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-App.debug.xcconfig"; path = "Pods/Target Support Files/Pods-App/Pods-App.debug.xcconfig"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -177,6 +181,8 @@
 				C1A70B0100000000000000A4 /* NativeTabBarPlugin.m */,
 				C1A70B0200000000000000B3 /* RestTimerPlugin.swift */,
 				C1A70B0200000000000000B4 /* RestTimerPlugin.m */,
+				C1A70B0300000000000000C3 /* WatchLinkPlugin.swift */,
+				C1A70B0300000000000000C4 /* WatchLinkPlugin.m */,
 				A0805B5E94256E37D6187EDA /* App.entitlements */,
 				8B091E74B5C053D4952BF1E1 /* ViewController.swift */,
 			);
@@ -438,6 +444,8 @@
 				C1A70B0100000000000000A2 /* NativeTabBarPlugin.m in Sources */,
 				C1A70B0200000000000000B1 /* RestTimerPlugin.swift in Sources */,
 				C1A70B0200000000000000B2 /* RestTimerPlugin.m in Sources */,
+				C1A70B0300000000000000C1 /* WatchLinkPlugin.swift in Sources */,
+				C1A70B0300000000000000C2 /* WatchLinkPlugin.m in Sources */,
 				A794929E59BA27A758E00BDC /* ViewController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
