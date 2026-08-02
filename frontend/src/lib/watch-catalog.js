@@ -10,11 +10,17 @@
 // È la semantica giusta per una cache e non lascia code da smaltire.
 // =====================================================
 import * as watch from '@/lib/watch';
-import { listWorkoutsForMember } from '@/lib/data/workouts';
-import { buildSnapshotLog } from '@/lib/data/sessions';
-import { listExercisesBrief } from '@/lib/data/exercises';
+import { buildSnapshotLog, getLastCompletedSets } from '@/lib/data/sessions';
+import { listExerciseNamesByIds } from '@/lib/data/exercises';
 
-export async function pushCatalog(memberId) {
+/**
+ * `workouts` sono le schede del member, GIÀ LETTE dal chiamante (in
+ * TrainingView è `schede.value`, appena tornato da `listWorkoutsForMember`):
+ * pushCatalog non le rilegge, per non pagare due volte la stessa query nello
+ * stesso giro di `load()`. Il filtro attiva/non archiviata resta qui dentro,
+ * perché è pushCatalog a decidere cosa merita di finire al polso.
+ */
+export async function pushCatalog(memberId, workouts) {
   if (!watch.isSupported()) return { pushed: false, reason: 'non supportato' };
 
   // getLink e NON getState: quest'ultima svuota il buffer, e qui serve solo
@@ -25,21 +31,32 @@ export async function pushCatalog(memberId) {
     return { pushed: false, reason: 'app non installata sul Watch' };
   }
 
-  const workouts = (await listWorkoutsForMember(memberId))
-    .filter((w) => w.is_active && !w.archived);
-  // Brief e non il catalogo intero: qui serve solo il nome, e le ~873 voci
-  // complete con istruzioni e immagini sono egress sprecato.
-  const catalog = await listExercisesBrief();
-  const nameById = Object.fromEntries(catalog.map((e) => [e.id, e.name]));
+  const activeWorkouts = (workouts || []).filter((w) => w.is_active && !w.archived);
+
+  // Un'unica query per i nomi, filtrata sui soli id davvero referenziati
+  // dalle giornate da spingere: non il catalogo intero (~873 righe con
+  // istruzioni e immagini), che sarebbe egress sprecato per leggere solo
+  // `.name`.
+  const exerciseIds = [...new Set(
+    activeWorkouts
+      .flatMap((w) => (w.days_json || []).flatMap((d) => (d.exercises || []).map((e) => e.exercise_id)))
+      .filter(Boolean)
+  )];
+  const names = await listExerciseNamesByIds(exerciseIds);
+  const nameById = Object.fromEntries(names.map((e) => [e.id, e.name]));
+
+  // Calcolata una sola volta per l'intera cache: senza, ogni giornata di ogni
+  // scheda ripeterebbe la stessa interrogazione "ultime sessioni completate".
+  const lastSets = await getLastCompletedSets(memberId);
 
   const payload = {
     type: 'catalog',
     synced_at: new Date().toISOString(),
-    workouts: await Promise.all(workouts.map(async (w) => ({
+    workouts: await Promise.all(activeWorkouts.map(async (w) => ({
       id: w.id,
       title: w.title,
       days: await Promise.all((w.days_json || []).map(async (day, index) => {
-        const log = await buildSnapshotLog(day.exercises || [], memberId);
+        const log = await buildSnapshotLog(day.exercises || [], memberId, lastSets);
         return {
           index,
           name: day.name || `Giornata ${index + 1}`,

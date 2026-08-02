@@ -47,24 +47,15 @@ export async function getSession(id) {
 }
 
 /**
- * Costruisce lo snapshot delle serie di una giornata, con reps e carichi
- * precompilati dall'ultima sessione completata che conteneva l'esercizio.
+ * Ultimo set noto per ciascun esercizio, dalle sessioni COMPLETATE più
+ * recenti del member (fino a PAST_SESSIONS_LOOKBACK).
  *
- * Estratta da `startSession` perché serve anche a preparare la cache del
- * Watch: al polso i valori devono essere GIÀ risolti — il Watch non ha
- * credenziali Supabase e non può calcolarli.
+ * Isolata da `buildSnapshotLog` perché è un'interrogazione per MEMBER, non
+ * per giornata: `pushCatalog` la calcola una volta sola e la passa a ogni
+ * chiamata di `buildSnapshotLog` (una per giornata di ogni scheda attiva),
+ * invece di ripagarla identica a ogni giornata.
  */
-export async function buildSnapshotLog(dayExercises, memberId) {
-  const exerciseIds = [...new Set(dayExercises.map((e) => e.exercise_id).filter(Boolean))];
-
-  const metaById = {};
-  if (exerciseIds.length) {
-    const catalog = unwrap(
-      await db().from('exercises').select('id, load_type, has_incline').in('id', exerciseIds)
-    );
-    for (const c of catalog || []) metaById[c.id] = c;
-  }
-
+export async function getLastCompletedSets(memberId) {
   const past = unwrap(
     await db()
       .from('workout_sessions')
@@ -83,9 +74,38 @@ export async function buildSnapshotLog(dayExercises, memberId) {
       }
     }
   }
+  return lastSetsByExercise;
+}
+
+/**
+ * Costruisce lo snapshot delle serie di una giornata, con reps e carichi
+ * precompilati dall'ultima sessione completata che conteneva l'esercizio.
+ *
+ * Estratta da `startSession` perché serve anche a preparare la cache del
+ * Watch: al polso i valori devono essere GIÀ risolti — il Watch non ha
+ * credenziali Supabase e non può calcolarli.
+ *
+ * `lastSetsByExercise` è opzionale: se non passato (caso `startSession`, una
+ * sola giornata) viene calcolato qui. `pushCatalog` invece lo calcola UNA
+ * volta con `getLastCompletedSets` e lo passa a ogni giornata di ogni
+ * scheda, per non ripetere la stessa query "ultime sessioni completate" una
+ * volta per giornata.
+ */
+export async function buildSnapshotLog(dayExercises, memberId, lastSetsByExercise) {
+  const exerciseIds = [...new Set(dayExercises.map((e) => e.exercise_id).filter(Boolean))];
+
+  const metaById = {};
+  if (exerciseIds.length) {
+    const catalog = unwrap(
+      await db().from('exercises').select('id, load_type, has_incline').in('id', exerciseIds)
+    );
+    for (const c of catalog || []) metaById[c.id] = c;
+  }
+
+  const lastSets = lastSetsByExercise ?? (await getLastCompletedSets(memberId));
 
   return dayExercises.map((e) => {
-    const prev = lastSetsByExercise[e.exercise_id] || [];
+    const prev = lastSets[e.exercise_id] || [];
     const nSets = Math.max(1, e.sets || 1);
     const hasIncline = metaById[e.exercise_id]?.has_incline || false;
     const sets_log = Array.from({ length: nSets }, (_, i) => ({

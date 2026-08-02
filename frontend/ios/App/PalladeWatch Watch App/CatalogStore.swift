@@ -57,15 +57,46 @@ final class CatalogStore: ObservableObject {
         guard (message["type"] as? String) == "catalog",
               let raw = message["workouts"] as? [[String: Any]] else { return false }
 
+        // I compactMap scartano workout/giornata/esercizio malformati invece
+        // di far fallire l'intera cache — una lista parziale è più utile di
+        // una vuota in palestra. Ma scartare in silenzio renderebbe
+        // undiagnosticabile senza cavo un futuro cambio di forma del
+        // payload: ogni scarto stampa cosa e perché.
         let parsed: [CachedWorkout] = raw.compactMap { w in
-            guard let id = w["id"] as? String, let title = w["title"] as? String,
-                  let days = w["days"] as? [[String: Any]] else { return nil }
+            guard let id = w["id"] as? String else {
+                print("[CatalogStore] scheda scartata: chiave 'id' mancante o non stringa — \(w)")
+                return nil
+            }
+            guard let title = w["title"] as? String else {
+                print("[CatalogStore] scheda \(id) scartata: chiave 'title' mancante o non stringa")
+                return nil
+            }
+            guard let days = w["days"] as? [[String: Any]] else {
+                print("[CatalogStore] scheda \(id) scartata: chiave 'days' mancante o non è un array")
+                return nil
+            }
             return CachedWorkout(id: id, title: title, days: days.compactMap { d in
-                guard let index = d["index"] as? Int, let name = d["name"] as? String,
-                      let exs = d["exercises"] as? [[String: Any]] else { return nil }
+                guard let index = d["index"] as? Int else {
+                    print("[CatalogStore] giornata di '\(title)' scartata: chiave 'index' mancante o non intera")
+                    return nil
+                }
+                guard let name = d["name"] as? String else {
+                    print("[CatalogStore] giornata \(index) di '\(title)' scartata: chiave 'name' mancante o non stringa")
+                    return nil
+                }
+                guard let exs = d["exercises"] as? [[String: Any]] else {
+                    print("[CatalogStore] giornata \(index) di '\(title)' scartata: chiave 'exercises' mancante o non è un array")
+                    return nil
+                }
                 return CachedDay(index: index, name: name, exercises: exs.compactMap { e in
-                    guard let exId = e["exercise_id"] as? String,
-                          let exName = e["name"] as? String else { return nil }
+                    guard let exId = e["exercise_id"] as? String else {
+                        print("[CatalogStore] esercizio scartato in '\(title)'/'\(name)': chiave 'exercise_id' mancante o non stringa")
+                        return nil
+                    }
+                    guard let exName = e["name"] as? String else {
+                        print("[CatalogStore] esercizio \(exId) scartato in '\(title)'/'\(name)': chiave 'name' mancante o non stringa")
+                        return nil
+                    }
                     let sugg = (e["suggested"] as? [[String: Any]] ?? []).map {
                         CachedSuggestion(reps: $0["reps"] as? Int,
                                          load: $0["load"] as? Double,

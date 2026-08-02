@@ -56,6 +56,19 @@ export async function listExercisesBrief() {
   );
 }
 
+/**
+ * Solo il nome dei soli esercizi indicati. Per la cache del Watch, che deve
+ * mostrare un nome per riga e nient'altro: niente `select('*')` né
+ * `listExercisesBrief()`, che leggerebbero l'intero catalogo (~873 righe con
+ * descrizione, video, immagine…) per poi scartare tutto tranne `.name`.
+ */
+export async function listExerciseNamesByIds(ids) {
+  if (!ids?.length) return [];
+  return unwrap(
+    await db().from('exercises').select('id, name').in('id', ids)
+  );
+}
+
 /** Crea una voce di catalogo (trainer/admin). */
 export async function createExercise(fields) {
   if (!fields.name) throw new Error('Il nome dell\'esercizio è obbligatorio');

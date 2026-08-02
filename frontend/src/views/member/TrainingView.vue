@@ -303,7 +303,9 @@ async function load() {
     // il member ha appena visto le proprie schede, quindi ciò che finisce al
     // polso è ciò che ha davanti agli occhi. Non si attende e non si propaga
     // l'errore: il Watch è opzionale e non deve ritardare la schermata.
-    pushCatalog(user.value.id).catch(() => {});
+    // schede.value è già stato letto qui sopra: si passa quello, non lo si
+    // rilegge dentro pushCatalog.
+    pushCatalog(user.value.id, schede.value).catch(() => {});
   }
 }
 
