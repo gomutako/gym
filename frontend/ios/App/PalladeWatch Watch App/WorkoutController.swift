@@ -182,14 +182,42 @@ extension WorkoutController: HKWorkoutSessionDelegate {
             // torna `nil` se `end()` ha già preso in carico la chiusura
             // (es. l'utente ha premuto "Termina" un istante prima), quindi
             // qui non si rischia una doppia finalizzazione.
-            guard toState == .ended, let owned = self.takeOwnershipForFinalization() else { return }
+            //
+            // ⚠️ `self.state == .running` NON è ridondante con la presa di
+            // proprietà: `session`/`builder` vengono assegnati in `start()`
+            // PRIMA dell'`await` su `beginCollection`, quindi esiste una
+            // finestra in cui sono già valorizzati ma `state` non è ancora
+            // `.running`. È esattamente la finestra del timeout di 8s (un
+            // altro allenamento già attivo altrove): se il sistema consegna
+            // `didChangeTo(.ended)` in quella finestra e la lasciamo passare,
+            // rubiamo la coppia a `start()` e chiamiamo `finalize()`
+            // (`endCollection`/`finishWorkout`) mentre il task group di
+            // `start()` sta ancora aspettando `beginCollection` sullo stesso
+            // builder — due chiamate di lifecycle concorrenti su un solo
+            // `HKLiveWorkoutBuilder`, non supportato da HealthKit. Non
+            // togliere questa condizione "per pulizia".
+            guard toState == .ended, self.state == .running,
+                  let owned = self.takeOwnershipForFinalization() else { return }
             await self.finalize(session: owned.session, builder: owned.builder)
         }
     }
 
     nonisolated func workoutSession(_ workoutSession: HKWorkoutSession,
                                     didFailWithError error: Error) {
-        Task { @MainActor in self.state = .failed(error.localizedDescription) }
+        Task { @MainActor in
+            self.state = .failed(error.localizedDescription)
+            // Prendiamo comunque possesso di session/builder e li chiudiamo:
+            // altrimenti un `start()` successivo li sovrascriverebbe senza
+            // mai rilasciare lo slot di sistema (se HealthKit lo liberi da
+            // solo alla consegna di un fallimento non è documentato, quindi
+            // non ci si può contare). Non chiamiamo `finalize()`: i dati
+            // raccolti fino a un fallimento di sessione non sono affidabili
+            // e NON vanno salvati in Salute — è una scelta deliberata, non
+            // una dimenticanza.
+            if let owned = self.takeOwnershipForFinalization() {
+                owned.session.end()
+            }
+        }
     }
 }
 

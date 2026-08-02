@@ -4,6 +4,15 @@ struct ContentView: View {
     @StateObject private var workout = WorkoutController.shared
     @State private var error: String?
 
+    /// Il messaggio di un salvataggio fallito vive in `workout.state`, non in
+    /// `error`: senza intercettarlo qui, `.failed` cade nel `default` dello
+    /// switch e l'utente torna al picker credendo che l'allenamento sia
+    /// stato salvato in Salute quando non lo è.
+    private var savedFailureMessage: String? {
+        if case .failed(let message) = workout.state { return message }
+        return nil
+    }
+
     var body: some View {
         Group {
             switch workout.state {
@@ -28,8 +37,8 @@ struct ContentView: View {
                     }
                 }
                 .overlay(alignment: .bottom) {
-                    if let error {
-                        Text(error).font(.caption2).foregroundStyle(.red)
+                    if let message = savedFailureMessage ?? error {
+                        Text(message).font(.caption2).foregroundStyle(.red)
                             .multilineTextAlignment(.center)
                     }
                 }
