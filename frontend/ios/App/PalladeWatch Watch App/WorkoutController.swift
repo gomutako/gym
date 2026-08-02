@@ -35,6 +35,14 @@ final class WorkoutController: NSObject, ObservableObject {
     private var session: HKWorkoutSession?
     private var builder: HKLiveWorkoutBuilder?
 
+    /// Guardia di rientranza per `start()`, impostata in modo sincrono prima
+    /// di ogni `await`: un doppio tap sulla giornata rientra in `start()`
+    /// mentre la prima chiamata è sospesa, e senza questo flag entrambe
+    /// passerebbero il controllo su `state` (che diventa `.running` solo
+    /// alla fine) creando due `HKWorkoutSession` e perdendo il riferimento
+    /// alla prima.
+    private var isStarting = false
+
     private let hrType = HKQuantityType.quantityType(forIdentifier: .heartRate)!
     private let enType = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned)!
 
@@ -55,7 +63,14 @@ final class WorkoutController: NSObject, ObservableObject {
     }
 
     func start() async throws {
-        guard state != .running else { return }
+        // `isStarting` va letto e impostato qui, sincrono, prima di ogni
+        // `await`: è l'unico modo per rendere il controllo atomico rispetto
+        // a un rientro. `state != .running` da solo non basta perché
+        // `state` passa a `.running` solo alla fine della funzione, dopo il
+        // primo punto di sospensione.
+        guard state != .running, !isStarting else { return }
+        isStarting = true
+        defer { isStarting = false }
 
         let config = HKWorkoutConfiguration()
         config.activityType = .traditionalStrengthTraining
@@ -73,33 +88,77 @@ final class WorkoutController: NSObject, ObservableObject {
         let start = Date()
         session.startActivity(with: start)
 
-        // Il timeout esiste per il caso "allenamento già attivo altrove", in
-        // cui l'avvio non torna né riesce: senza, la schermata resterebbe
-        // bloccata per sempre senza spiegare nulla.
-        try await withThrowingTaskGroup(of: Void.self) { group in
-            group.addTask { try await builder.beginCollection(at: start) }
-            group.addTask {
-                try await Task.sleep(nanoseconds: 8_000_000_000)
-                throw WorkoutError.timeout
+        do {
+            // Il timeout esiste per il caso "allenamento già attivo altrove", in
+            // cui l'avvio non torna né riesce: senza, la schermata resterebbe
+            // bloccata per sempre senza spiegare nulla.
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask { try await builder.beginCollection(at: start) }
+                group.addTask {
+                    try await Task.sleep(nanoseconds: 8_000_000_000)
+                    throw WorkoutError.timeout
+                }
+                try await group.next()
+                group.cancelAll()
             }
-            try await group.next()
-            group.cancelAll()
+        } catch {
+            // Un avvio fallito (timeout compreso) non deve lasciare una
+            // sessione orfana: su watchOS ce n'è UNA sola possibile di
+            // sistema, quindi un residuo qui farebbe fallire per timeout
+            // ogni tentativo successivo, dando la colpa a un allenamento
+            // altrove che in realtà siamo noi.
+            session.end()
+            self.session = nil
+            self.builder = nil
+            throw error
         }
 
         state = .running
     }
 
-    func end() async {
-        guard let session, let builder else { return }
-        session.end()
-        try? await builder.endCollection(at: Date())
-        // Salva l'HKWorkout in Salute: anelli, calorie e cronologia Fitness
-        // restano corretti come se avesse registrato l'app Allenamento, ed è
-        // ciò che HealthKitLivePlugin.summary() rileggerà sull'iPhone.
-        _ = try? await builder.finishWorkout()
+    /// Trasferisce in modo atomico la proprietà di sessione e builder a chi
+    /// la chiama, azzerando i riferimenti dell'istanza nello stesso istante
+    /// (nessun `await` nel mezzo). Chi riceve la coppia è l'UNICO
+    /// responsabile di chiuderla e salvarla; chiunque altro riceva `nil` non
+    /// deve fare nulla. È quanto rende sicuri, insieme, il doppio tap su
+    /// "Termina", la fine imposta dal sistema mentre `end()` è già in corso,
+    /// ed `end()` chiamato senza che una sessione sia mai partita.
+    private func takeOwnershipForFinalization() -> (session: HKWorkoutSession, builder: HKLiveWorkoutBuilder)? {
+        guard let session, let builder else { return nil }
         self.session = nil
         self.builder = nil
-        state = .ended
+        return (session, builder)
+    }
+
+    /// Chiude la sessione HealthKit e salva l'HKWorkout in Salute. Va
+    /// chiamato SOLO con una coppia ottenuta da
+    /// `takeOwnershipForFinalization()`, mai leggendo `self.session`/
+    /// `self.builder` direttamente: altrimenti due percorsi concorrenti
+    /// (l'utente e il sistema, o due tap) proverebbero a salvare lo stesso
+    /// allenamento due volte.
+    private func finalize(session: HKWorkoutSession, builder: HKLiveWorkoutBuilder) async {
+        session.end()
+        do {
+            try await builder.endCollection(at: Date())
+            // Salva l'HKWorkout in Salute: anelli, calorie e cronologia Fitness
+            // restano corretti come se avesse registrato l'app Allenamento, ed è
+            // ciò che HealthKitLivePlugin.summary() rileggerà sull'iPhone.
+            _ = try await builder.finishWorkout()
+            state = .ended
+        } catch {
+            // Senza questo ramo un salvataggio fallito sembra identico a uno
+            // riuscito: l'utente crede che l'allenamento sia in Salute
+            // quando non lo è. Il messaggio resta in italiano, l'errore
+            // originale va in console per poterlo diagnosticare dal device
+            // (`devicectl ... --console`).
+            state = .failed("Non sono riuscito a salvare l'allenamento in Salute. Riprova.")
+            print("WorkoutController: salvataggio del workout fallito - \(error.localizedDescription)")
+        }
+    }
+
+    func end() async {
+        guard let owned = takeOwnershipForFinalization() else { return }
+        await finalize(session: owned.session, builder: owned.builder)
     }
 
     enum WorkoutError: LocalizedError {
@@ -117,8 +176,14 @@ extension WorkoutController: HKWorkoutSessionDelegate {
                                     date: Date) {
         Task { @MainActor in
             // Il sistema può terminare la nostra sessione se l'utente ne apre
-            // un'altra: va notato, non subito in silenzio.
-            if toState == .ended, self.state == .running { self.state = .ended }
+            // un'altra (es. dall'app Allenamento): va salvata comunque,
+            // altrimenti frequenza cardiaca e calorie raccolte fino a quel
+            // momento si perdono in silenzio. `takeOwnershipForFinalization`
+            // torna `nil` se `end()` ha già preso in carico la chiusura
+            // (es. l'utente ha premuto "Termina" un istante prima), quindi
+            // qui non si rischia una doppia finalizzazione.
+            guard toState == .ended, let owned = self.takeOwnershipForFinalization() else { return }
+            await self.finalize(session: owned.session, builder: owned.builder)
         }
     }
 
