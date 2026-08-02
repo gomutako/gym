@@ -282,6 +282,7 @@ function addSet(exI) {
   const ex = log.value[exI];
   const last = ex.sets_log[ex.sets_log.length - 1];
   ex.sets_log.push({
+    uid: crypto.randomUUID(),
     reps: last?.reps ?? ex.target_reps ?? null,
     load: last?.load ?? null,
     ...(hasIncline(ex) ? { incline: last?.incline ?? null } : {}),

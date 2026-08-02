@@ -101,6 +101,10 @@ export async function startSession(workoutId, dayIndex, memberId) {
     const nSets = Math.max(1, e.sets || 1);
     const hasIncline = metaById[e.exercise_id]?.has_incline || false;
     const sets_log = Array.from({ length: nSets }, (_, i) => ({
+      // Identità STABILE della serie. Il protocollo Watch↔iPhone referenzia
+      // sempre uid e mai la posizione: addSet/removeSet sull'iPhone spostano
+      // gli indici, e un "fatto" in volo atterrerebbe sulla riga sbagliata.
+      uid: crypto.randomUUID(),
       reps: prev[i]?.reps ?? e.reps ?? null,
       load: prev[i]?.load ?? null,
       // la pendenza esiste solo per gli esercizi che la prevedono (es. tapis roulant)
@@ -139,11 +143,12 @@ export async function startSession(workoutId, dayIndex, memberId) {
  * Passa `completed_at` con un timestamp ISO per chiudere l'allenamento, `null`
  * per riaprirlo.
  */
-export async function updateSession(id, { exercises_log, completed_at, biometrics_json }) {
+export async function updateSession(id, { exercises_log, completed_at, biometrics_json, client_session_id }) {
   const patch = {};
   if (exercises_log !== undefined) patch.exercises_log = exercises_log;
   if (completed_at !== undefined) patch.completed_at = completed_at;
   if (biometrics_json !== undefined) patch.biometrics_json = biometrics_json;
+  if (client_session_id !== undefined) patch.client_session_id = client_session_id;
   if (Object.keys(patch).length === 0) throw new Error('Nessun campo da aggiornare');
 
   return unwrap(
