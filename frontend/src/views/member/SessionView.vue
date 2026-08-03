@@ -10,6 +10,7 @@ import { listExercises } from '@/lib/data/exercises';
 import ImageCarousel from '@/components/ImageCarousel.vue';
 import * as healthkit from '@/lib/healthkit';
 import * as restNotify from '@/lib/rest-notifications';
+import * as watchLink from '@/lib/watch';
 
 // Immagini di un esercizio del catalogo: tutte (image_paths) o la sola copertina
 const exerciseImages = (ex) =>
@@ -32,6 +33,12 @@ const hkError = ref('');          // perché i dati non arrivano (permesso, plug
 const now = ref(Date.now());      // tick periodico per rendere reattivo hrStale
 let hkUnsub = null;
 let hkTickInterval = null;
+
+// Sorgente dei biometrici. Il Watch, quando c'è, vince su HealthKit: legge
+// dal sensore in presa diretta (<1s) invece di aspettare che i campioni
+// vengano sincronizzati sul telefono (da pochi a decine di secondi).
+const watchLive = ref(false);
+let watchUnsub = null;
 
 const index = ref(0);
 const direction = ref('next');
@@ -211,6 +218,7 @@ onUnmounted(() => {
   if (hkTickInterval) clearInterval(hkTickInterval);
   if (hkUnsub) hkUnsub();
   if (hkSupported) healthkit.stop();
+  if (watchUnsub) watchUnsub();
 });
 
 // --- Persistenza (salva tutto il log esercizi) ---
@@ -377,6 +385,11 @@ async function loadSession() {
   if (hkSupported) {
     try { await healthkit.stop(); } catch { /* nessun monitoraggio attivo: ignorabile */ }
   }
+  // Stessa ragione dell'HealthKit sopra: il listener del Watch appartiene
+  // alla sessione precedente, va rimosso prima di ricaricare o continuerebbe
+  // ad aggiornare i badge della sessione appena aperta con dati vecchi.
+  if (watchUnsub) { watchUnsub(); watchUnsub = null; }
+  watchLive.value = false;
   liveHR.value = null;
   liveKcal.value = null;
   lastSampleAt.value = null;
@@ -446,6 +459,19 @@ async function loadSession() {
         hkError.value = e?.message || String(e);
       }
     }
+    // Il canale Watch è indipendente da HealthKit (non passa dai permessi
+    // Salute): si attiva finché la sessione è dal vivo, e va spento sulle
+    // sessioni già completate, altrimenti "Watch" resterebbe scritto accanto
+    // a un valore medio storico che non ha nulla a che fare col Watch.
+    if (watchLink.isSupported() && session.value && !session.value.completed_at) {
+      watchUnsub = watchLink.onMessage((msg) => {
+        if (msg?.type !== 'biometrics') return;
+        watchLive.value = true;
+        if (msg.hr != null) liveHR.value = msg.hr;
+        if (msg.kcal != null) liveKcal.value = msg.kcal;
+        lastSampleAt.value = Date.now();
+      });
+    }
   } catch (e) {
     error.value = e.message;
   } finally {
@@ -486,6 +512,7 @@ watch(() => route.params.id, loadSession);
         <div v-if="hkSupported || saved" class="mt-3 flex flex-wrap gap-2">
           <span class="inline-flex items-center gap-1 rounded-full bg-red-50 px-3 py-1 text-sm font-medium text-red-700">
             ❤️ {{ badgeHR != null ? badgeHR + ' bpm' : '—' }}
+            <span v-if="watchLive" class="text-[10px] text-emerald-600">Watch</span>
             <span v-if="badgeHR != null && sampleAge" class="font-normal text-red-400">· {{ sampleAge }}</span>
           </span>
           <span class="inline-flex items-center gap-1 rounded-full bg-orange-50 px-3 py-1 text-sm font-medium text-orange-600">

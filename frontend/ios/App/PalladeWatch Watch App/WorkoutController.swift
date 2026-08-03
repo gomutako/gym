@@ -161,6 +161,25 @@ final class WorkoutController: NSObject, ObservableObject {
         await finalize(session: owned.session, builder: owned.builder)
     }
 
+    /// Inoltra i biometrici all'iPhone. NON accodati: un HR di trenta secondi
+    /// fa non serve a nessuno, e accodarlo riempirebbe la coda ritardando i
+    /// valori veri. Se il telefono è nell'armadietto il dato si perde e va
+    /// bene: HealthKit lo registra comunque nel workout.
+    private var lastPublish = Date.distantPast
+
+    private func publishBiometrics() {
+        // Un campione al secondo basta a un badge: senza freno il builder può
+        // chiamare più volte per lo stesso istante.
+        guard Date().timeIntervalSince(lastPublish) > 1 else { return }
+        lastPublish = Date()
+        PhoneLink.shared.send([
+            "type": "biometrics",
+            "hr": heartRate as Any,
+            "kcal": activeKcal as Any,
+            "at": ISO8601DateFormatter().string(from: Date()),
+        ], queued: false)
+    }
+
     enum WorkoutError: LocalizedError {
         case timeout
         var errorDescription: String? {
@@ -235,10 +254,14 @@ extension WorkoutController: HKLiveWorkoutBuilderDelegate {
                 let value = stats.mostRecentQuantity()?.doubleValue(for: bpm)
                 Task { @MainActor in
                     self.heartRate = value.map { Int($0.rounded()) }
+                    self.publishBiometrics()
                 }
             } else if quantityType == HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned) {
                 let value = stats.sumQuantity()?.doubleValue(for: .kilocalorie())
-                Task { @MainActor in self.activeKcal = value }
+                Task { @MainActor in
+                    self.activeKcal = value
+                    self.publishBiometrics()
+                }
             }
         }
     }
