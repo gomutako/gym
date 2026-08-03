@@ -11,6 +11,7 @@ import ImageCarousel from '@/components/ImageCarousel.vue';
 import * as healthkit from '@/lib/healthkit';
 import * as restNotify from '@/lib/rest-notifications';
 import * as watchLink from '@/lib/watch';
+import { mergeSetDone } from '@/lib/session-merge';
 
 // Immagini di un esercizio del catalogo: tutte (image_paths) o la sola copertina
 const exerciseImages = (ex) =>
@@ -76,6 +77,14 @@ let watchUnsub = null;
 const WATCH_LIVE_MS = 3000;
 const watchLive = computed(() =>
   !!lastWatchSampleAt.value && nowTick.value - lastWatchSampleAt.value < WATCH_LIVE_MS);
+
+// Chiave con cui il Watch identifica questa sessione. Una sessione nata
+// sull'iPhone non ha `client_session_id` — non esisteva nessun Watch quando
+// è stata creata — e allora si usa l'id della riga. Deve essere la STESSA
+// risoluzione usata da `resolveSessionId` in watch-session.js, o il Watch e
+// l'iPhone parlerebbero di due sessioni diverse.
+const watchSessionKey = computed(() =>
+  session.value?.client_session_id || session.value?.id || '');
 
 const index = ref(0);
 const direction = ref('next');
@@ -282,6 +291,19 @@ function onSetButton(exI, rowI) {
     row.done_at = new Date().toISOString();
     startRest(exI, rowI, log.value[exI].rest_seconds);
     persist();
+
+    // Il Watch deve sapere che questa serie è chiusa, o mostrerebbe ancora
+    // il tasto Fatto per una serie già fatta. `queued: true` (default): se il
+    // Watch è al polso ma l'app non è aperta, il messaggio lo aspetta.
+    watchLink.send({
+      type: 'set_done',
+      client_session_id: watchSessionKey.value,
+      uid: row.uid,
+      reps: row.reps,
+      load: row.load,
+      ...(row.incline !== undefined ? { incline: row.incline } : {}),
+      done_at: row.done_at,
+    }).catch(() => {});
 
     // Notifica di fine recupero. Il permesso è già stato chiesto all'apertura
     // dell'allenamento (vedi loadSession), quindi qui `ensurePermission()`
@@ -501,13 +523,28 @@ async function loadSession() {
     // sessioni già completate, altrimenti "Watch" resterebbe scritto accanto
     // a un valore medio storico che non ha nulla a che fare col Watch.
     if (watchLink.isSupported() && session.value && !session.value.completed_at) {
-      watchUnsub = watchLink.onMessage((msg) => {
-        if (msg?.type !== 'biometrics') return;
-        const ts = Date.now();
-        if (msg.hr != null) liveHR.value = msg.hr;
-        if (msg.kcal != null) liveKcal.value = msg.kcal;
-        lastSampleAt.value = ts;
-        lastWatchSampleAt.value = ts;
+      watchUnsub = watchLink.onMessage(async (msg) => {
+        if (msg?.type === 'biometrics') {
+          const ts = Date.now();
+          if (msg.hr != null) liveHR.value = msg.hr;
+          if (msg.kcal != null) liveKcal.value = msg.kcal;
+          lastSampleAt.value = ts;
+          lastWatchSampleAt.value = ts;
+          return;
+        }
+        if (msg?.type === 'set_done') {
+          const { log, changed } = mergeSetDone(session.value.exercises_log, {
+            uid: msg.uid, reps: msg.reps, load: msg.load,
+            ...(msg.incline !== undefined ? { incline: msg.incline } : {}),
+            done_at: msg.done_at,
+          });
+          // `changed` false significa che questo fatto era già noto: persistere
+          // e ritrasmettere farebbe rimbalzare lo stesso evento fra i due
+          // dispositivi senza fine.
+          if (!changed) return;
+          session.value.exercises_log = log;
+          await persist();
+        }
       });
     }
   } catch (e) {

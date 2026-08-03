@@ -77,11 +77,41 @@ struct ExecutionView: View {
 
     private func markDone(ex: LiveExercise, set: LiveSet) {
         let at = Date()
+        // `store.mergeSetDone` applica anche la Regola 2 (vince il done_at più
+        // vecchio): se ritorna false l'evento non ha cambiato nulla e non va
+        // né persistito né inviato, altrimenti iPhone e Watch si
+        // rimbalzerebbero lo stesso fatto all'infinito.
         guard store.mergeSetDone(uid: set.uid, reps: set.reps, load: set.load,
                                  incline: set.incline, doneAt: at) else { return }
         if ex.restSeconds > 0 {
             RestNotifier.schedule(seconds: TimeInterval(ex.restSeconds),
                                   body: "\(ex.name) — pronto per la serie successiva")
         }
+        // Una serie chiusa non può andare persa: il telefono può stare
+        // nell'armadietto per l'intero allenamento (queued: true).
+        //
+        // `reps`/`load` usano `as Any? ?? NSNull()`, non `as Any`: un
+        // Optional.none incapsulato da solo rende il dizionario non
+        // deserializzabile da WatchConnectivity, che scarta l'INTERO
+        // messaggio in silenzio (stesso pattern già corretto in
+        // WorkoutController.publishBiometrics, in questo target).
+        //
+        // `incline` invece NON usa lo stesso fallback: session-merge.js
+        // distingue una chiave assente da una esplicitamente `null` (vedi il
+        // commento lì) per non introdurre `incline` sugli esercizi che non
+        // lo prevedono. Se mandassimo sempre la chiave (anche NSNull per gli
+        // esercizi senza pendenza), ogni set_done dal Watch farebbe
+        // comparire `incline: null` anche dove non è mai esistito. Per
+        // questo la chiave si aggiunge SOLO quando c'è un valore.
+        var payload: [String: Any] = [
+            "type": "set_done",
+            "client_session_id": store.session?.clientSessionId ?? "",
+            "uid": set.uid,
+            "reps": set.reps as Any? ?? NSNull(),
+            "load": set.load as Any? ?? NSNull(),
+            "done_at": ISO8601DateFormatter.withFraction.string(from: at),
+        ]
+        if let inc = set.incline { payload["incline"] = inc }
+        PhoneLink.shared.send(payload, queued: true)
     }
 }

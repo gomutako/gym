@@ -7,6 +7,7 @@ import { useAuthStore } from '@/stores/auth';
 import { listWorkoutsForMember, setWorkoutActive } from '@/lib/data/workouts';
 import { listOwnSessions, startSession } from '@/lib/data/sessions';
 import { pushCatalog } from '@/lib/watch-catalog';
+import { drainWatchMessages } from '@/lib/watch-session';
 import Combobox from '@/components/Combobox.vue';
 
 const router = useRouter();
@@ -288,6 +289,13 @@ function formatDayTime(s) {
 async function load() {
   loading.value = true;
   try {
+    // Il Watch può aver svolto un allenamento intero con questa app chiusa:
+    // qui è dove quei dati entrano nel database. Va PRIMA della lettura, o la
+    // lista mostrerebbe lo stato precedente all'importazione.
+    try {
+      await drainWatchMessages(user.value.id);
+    } catch { /* il Watch è opzionale: non deve impedire di allenarsi */ }
+
     [schede.value, sessions.value] = await Promise.all([
       listWorkoutsForMember(user.value.id),
       listOwnSessions(user.value.id),
