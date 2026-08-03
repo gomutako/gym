@@ -172,10 +172,14 @@ final class WorkoutController: NSObject, ObservableObject {
         // chiamare più volte per lo stesso istante.
         guard Date().timeIntervalSince(lastPublish) > 1 else { return }
         lastPublish = Date()
+        // `as Any` da solo può incapsulare un Optional.none invece di NSNull:
+        // WatchConnectivity non sa deserializzarlo e scarta l'INTERO payload in
+        // silenzio (l'error handler di PhoneLink.send è vuoto di proposito). Lo
+        // stesso pattern è già in HealthKitLivePlugin.swift lato iPhone.
         PhoneLink.shared.send([
             "type": "biometrics",
-            "hr": heartRate as Any,
-            "kcal": activeKcal as Any,
+            "hr": heartRate as Any? ?? NSNull(),
+            "kcal": activeKcal as Any? ?? NSNull(),
             "at": ISO8601DateFormatter().string(from: Date()),
         ], queued: false)
     }

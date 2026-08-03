@@ -37,8 +37,25 @@ let hkTickInterval = null;
 // Sorgente dei biometrici. Il Watch, quando c'è, vince su HealthKit: legge
 // dal sensore in presa diretta (<1s) invece di aspettare che i campioni
 // vengano sincronizzati sul telefono (da pochi a decine di secondi).
-const watchLive = ref(false);
+const lastWatchSampleAt = ref(null); // istante dell'ultimo messaggio "biometrics" dal Watch
 let watchUnsub = null;
+// "Watch" è DERIVATO dalla freschezza dell'ultimo messaggio, non uno stato
+// impostato una volta e mai più spento: altrimenti il badge continuerebbe a
+// dire "Watch" anche dopo che l'orologio ha smesso di trasmettere (allenamento
+// terminato al polso, telefono tornato in armadietto), mentre sotto i numeri
+// continuano comunque a cambiare perché nel frattempo è HealthKit a
+// rinfrescarli — un'etichetta che mente sulla sorgente. Stesso principio del
+// timer di recupero: una scadenza calcolata, non uno stato sincronizzato a
+// mano, perché lo stato sincronizzato a mano va fuori fase con la realtà e
+// quello derivato no.
+// Soglia: il Watch pubblica al più un campione al secondo (vedi il freno in
+// WorkoutController.publishBiometrics), quindi 3s è larga abbastanza da non
+// sfarfallare tra un campione e il successivo, ma stretta abbastanza perché
+// chi termina l'allenamento al polso veda sparire l'etichetta mentre sta
+// ancora guardando lo schermo.
+const WATCH_LIVE_MS = 3000;
+const watchLive = computed(() =>
+  !!lastWatchSampleAt.value && now.value - lastWatchSampleAt.value < WATCH_LIVE_MS);
 
 const index = ref(0);
 const direction = ref('next');
@@ -389,7 +406,7 @@ async function loadSession() {
   // alla sessione precedente, va rimosso prima di ricaricare o continuerebbe
   // ad aggiornare i badge della sessione appena aperta con dati vecchi.
   if (watchUnsub) { watchUnsub(); watchUnsub = null; }
-  watchLive.value = false;
+  lastWatchSampleAt.value = null;
   liveHR.value = null;
   liveKcal.value = null;
   lastSampleAt.value = null;
@@ -466,10 +483,11 @@ async function loadSession() {
     if (watchLink.isSupported() && session.value && !session.value.completed_at) {
       watchUnsub = watchLink.onMessage((msg) => {
         if (msg?.type !== 'biometrics') return;
-        watchLive.value = true;
+        const ts = Date.now();
         if (msg.hr != null) liveHR.value = msg.hr;
         if (msg.kcal != null) liveKcal.value = msg.kcal;
-        lastSampleAt.value = Date.now();
+        lastSampleAt.value = ts;
+        lastWatchSampleAt.value = ts;
       });
     }
   } catch (e) {
