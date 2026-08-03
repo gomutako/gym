@@ -5,6 +5,18 @@ struct ContentView: View {
     @StateObject private var store = SessionStore.shared
     @State private var error: String?
 
+    /// Il messaggio di un salvataggio fallito vive in `workout.state`, non in
+    /// `error`: senza intercettarlo qui, `.failed` cade nel ramo `else` (che
+    /// mostra il picker) e l'utente torna all'inizio credendo che
+    /// l'allenamento sia stato salvato in Salute quando non lo è. Perso una
+    /// volta già in un refactoring precedente — chi tocca questa vista in
+    /// futuro: se sposti di nuovo la logica dei rami, porta con te anche
+    /// questo computed.
+    private var savedFailureMessage: String? {
+        if case .failed(let message) = workout.state { return message }
+        return nil
+    }
+
     var body: some View {
         Group {
             if workout.state == .running, store.session != nil {
@@ -31,8 +43,15 @@ struct ContentView: View {
                     }
                 }
                 .overlay(alignment: .bottom) {
-                    if let error {
-                        Text(error).font(.caption2).foregroundStyle(.red)
+                    // Precedenza al salvataggio fallito, anche se `error` è
+                    // più recente: un `.failed` non ancora riconosciuto
+                    // dall'utente rappresenta un allenamento perso, mentre un
+                    // errore di avvio è recuperabile con un nuovo tentativo.
+                    // Meglio rischiare di mostrare un messaggio "vecchio" che
+                    // farne sparire uno su un dato che non si può più
+                    // recuperare.
+                    if let message = savedFailureMessage ?? error {
+                        Text(message).font(.caption2).foregroundStyle(.red)
                             .multilineTextAlignment(.center)
                     }
                 }
