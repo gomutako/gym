@@ -53,9 +53,29 @@ let watchUnsub = null;
 // sfarfallare tra un campione e il successivo, ma stretta abbastanza perché
 // chi termina l'allenamento al polso veda sparire l'etichetta mentre sta
 // ancora guardando lo schermo.
+//
+// ⚠️ Il "clock" del confronto è `nowTick` (tick da 500ms, avviato nel PRIMO
+// onMounted più sotto, incondizionato), NON `now` (tick da 5000ms avviato
+// dentro il try/catch di HealthKit più in basso). Due ragioni, non solo una
+// questione di precisione:
+// 1. Con `now` (5s) il ritardo peggiore per spegnere l'etichetta sarebbe di
+//    quasi 8s (3s di soglia + fino a 5s prima che `now` si aggiorni di
+//    nuovo), abbastanza da far vedere di nuovo un badge bugiardo a chi ha
+//    appena finito sul Watch e guarda il telefono un paio di secondi dopo.
+// 2. `now` viene assegnato SOLO se `healthkit.requestAuth()`/`start()` non
+//    lanciano un'eccezione: se lanciano, il catch imposta `hkError` e quella
+//    riga non viene mai raggiunta, quindi `now` resta congelato al valore di
+//    mount per l'intera sessione — la sottoscrizione Watch è un blocco
+//    separato e non gated su questo, quindi continuerebbe ad aggiornare
+//    `lastWatchSampleAt` mentre non c'è più nulla che faccia scattare
+//    nuovamente il computed quando il Watch smette: il badge resterebbe
+//    "Watch" per sempre. `nowTick` non dipende da HealthKit, quindi questo
+//    caso non si presenta.
+// NON "sistemare" questo riferimento riportandolo su `now`: reintrodurrebbe
+// silenziosamente entrambi i problemi.
 const WATCH_LIVE_MS = 3000;
 const watchLive = computed(() =>
-  !!lastWatchSampleAt.value && now.value - lastWatchSampleAt.value < WATCH_LIVE_MS);
+  !!lastWatchSampleAt.value && nowTick.value - lastWatchSampleAt.value < WATCH_LIVE_MS);
 
 const index = ref(0);
 const direction = ref('next');
