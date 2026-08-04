@@ -7,4 +7,5 @@ CAP_PLUGIN(WatchLinkPlugin, "WatchLink",
     CAP_PLUGIN_METHOD(getState, CAPPluginReturnPromise);
     CAP_PLUGIN_METHOD(send, CAPPluginReturnPromise);
     CAP_PLUGIN_METHOD(setContext, CAPPluginReturnPromise);
+    CAP_PLUGIN_METHOD(setSessionState, CAPPluginReturnPromise);
 )

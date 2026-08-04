@@ -44,6 +44,22 @@ final class PhoneLink: NSObject, WCSessionDelegate, ObservableObject {
         }
     }
 
+    /// Chiede all'iPhone la sessione in corso. Risponde il plugin nativo
+    /// dalla sua copia su disco, quindi funziona anche a WebView sospesa —
+    /// è il motivo per cui questa non passa da `onMessage`/`send`: qui serve
+    /// una risposta sincrona, non un evento fire-and-forget.
+    func requestState(completion: @escaping ([String: Any]?) -> Void) {
+        let session = WCSession.default
+        guard session.activationState == .activated, session.isReachable else {
+            completion(nil); return
+        }
+        session.sendMessage(["type": "state_request"]) { reply in
+            DispatchQueue.main.async { completion(reply["session"] as? [String: Any]) }
+        } errorHandler: { _ in
+            DispatchQueue.main.async { completion(nil) }
+        }
+    }
+
     // MARK: - WCSessionDelegate
 
     func session(_ session: WCSession, activationDidCompleteWith state: WCSessionActivationState,

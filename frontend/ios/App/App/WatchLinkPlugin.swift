@@ -37,6 +37,17 @@ public class WatchLinkPlugin: CAPPlugin, WCSessionDelegate {
     /// quindi riordinabile rispetto a un drain concorrente.
     private let queue = DispatchQueue(label: "it.pallade.watchlink.buffer")
 
+    /// Copia dello stato della sessione iPhone in corso, mantenuta aggiornata
+    /// dal JS (vedi `setSessionState`). Risorsa separata dal buffer: qui
+    /// conta solo l'ULTIMO stato, come una cache, non una coda da svuotare —
+    /// serve unicamente a rispondere a `state_request` quando la WebView
+    /// dorme e non può farlo da sola.
+    private let stateURL: URL = {
+        let dir = FileManager.default.urls(for: .applicationSupportDirectory,
+                                           in: .userDomainMask)[0]
+        return dir.appendingPathComponent("watchlink-state.json")
+    }()
+
     override public func load() {
         loadBuffer()
         guard WCSession.isSupported() else { return }
@@ -135,6 +146,29 @@ public class WatchLinkPlugin: CAPPlugin, WCSessionDelegate {
         }
     }
 
+    /// Copia nativa dello stato della sessione iPhone, per rispondere al
+    /// Watch mentre la WebView dorme. Passare nessun payload la cancella
+    /// (sessione chiusa/completata): il chiamante JS lo fa da `complete()`.
+    @objc func setSessionState(_ call: CAPPluginCall) {
+        guard let payload = call.getObject("payload") else {
+            try? FileManager.default.removeItem(at: stateURL)
+            call.resolve()
+            return
+        }
+        if let data = try? JSONSerialization.data(withJSONObject: payload) {
+            try? data.write(to: stateURL, options: .atomic)
+        }
+        call.resolve()
+    }
+
+    /// Legge la copia su disco. Non passa dalla `queue` del buffer: è una
+    /// risorsa scalare indipendente (ultimo stato vince), non un accumulo
+    /// ordinato da consegnare per intero.
+    private func currentSessionState() -> [String: Any]? {
+        guard let data = try? Data(contentsOf: stateURL) else { return nil }
+        return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    }
+
     // MARK: - Buffer
 
     /// Append e scrittura sono un'unica chiusura sottomessa alla coda: o
@@ -210,6 +244,25 @@ public class WatchLinkPlugin: CAPPlugin, WCSessionDelegate {
 
     public func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
         deliver(message)
+    }
+
+    /// Variante con risposta sincrona, usata SOLO da `state_request`: il
+    /// Watch la invia per sapere se sull'iPhone c'è una sessione da
+    /// riprendere, tipicamente a schermo spento — risponde il plugin nativo
+    /// dalla propria copia su disco, non il JS, perché la WebView sospesa
+    /// non farebbe in tempo. Ogni altro tipo di messaggio finisce comunque
+    /// nel buffer/listener come nel percorso senza risposta.
+    public func session(_ session: WCSession, didReceiveMessage message: [String: Any],
+                        replyHandler: @escaping ([String: Any]) -> Void) {
+        guard (message["type"] as? String) == "state_request" else {
+            deliver(message)
+            replyHandler([:])
+            return
+        }
+        // `as Any? ?? NSNull()`, non `as Any`: un Optional.none incapsulato
+        // da solo fa scartare l'INTERA risposta da WatchConnectivity (stesso
+        // pattern già applicato in sessionStartedPayload/publishBiometrics).
+        replyHandler(["session": currentSessionState() as Any? ?? NSNull()])
     }
 
     public func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any]) {

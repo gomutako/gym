@@ -274,6 +274,22 @@ async function persist() {
     await updateSession(session.value.id, {
       exercises_log: session.value.exercises_log,
     });
+    // Copia nativa per l'aggancio del Watch: la richiesta arriva quando la
+    // WebView è sospesa e non potrebbe rispondere in tempo. Solo se la
+    // sessione è ancora in corso: su una completata (storico modificabile,
+    // gli input restano attivi anche qui) risveglierebbe uno stato "da
+    // riprendere" per un allenamento già chiuso.
+    if (!session.value.completed_at) {
+      watchLink.setSessionState({
+        client_session_id: watchSessionKey.value,
+        workout_id: session.value.workout_id,
+        workout_title: session.value.workout_title,
+        day_index: session.value.day_index,
+        day_name: session.value.day_name,
+        started_at: session.value.started_at,
+        exercises_log: session.value.exercises_log,
+      }).catch(() => {});
+    }
   } catch (e) {
     error.value = e.message;
   }
@@ -390,6 +406,8 @@ async function complete() {
       completed_at: new Date().toISOString(),
       ...(biometrics_json ? { biometrics_json } : {}),
     });
+    // La sessione è chiusa: niente più da riprendere dal Watch.
+    watchLink.setSessionState(null).catch(() => {});
     restNotify.cancel().catch(() => {});
     router.push({ name: 'training' });
   } catch (e) {

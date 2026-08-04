@@ -4,6 +4,10 @@ struct ContentView: View {
     @StateObject private var workout = WorkoutController.shared
     @StateObject private var store = SessionStore.shared
     @State private var error: String?
+    /// Sessione aperta sull'iPhone offerta in adozione al Watch, letta con
+    /// `PhoneLink.shared.requestState` all'apertura. `nil` finché non arriva
+    /// una risposta, o se non c'è nulla da riprendere.
+    @State private var pendingAdoption: [String: Any]?
 
     /// Il messaggio di un salvataggio fallito vive in `workout.state`, non in
     /// `error`: senza intercettarlo qui, `.failed` cade nel ramo `else` (che
@@ -33,7 +37,7 @@ struct ContentView: View {
                     }
                 }
             } else {
-                PickerView { w, d in
+                PickerView(onPick: { w, d in
                     Task {
                         guard await workout.requestAuth() else {
                             error = "Senza accesso a Salute non posso registrare l'allenamento."
@@ -48,7 +52,38 @@ struct ContentView: View {
                             self.error = error.localizedDescription
                         }
                     }
-                }
+                }, adoption: pendingAdoption, onAdopt: {
+                    guard let pending = pendingAdoption else { return }
+                    // `uniquingKeysWith`, non `uniqueKeysWithValues`: lo
+                    // stesso esercizio compare in più giornate e più schede,
+                    // e il costruttore che pretende chiavi uniche va in
+                    // crash a runtime sui duplicati.
+                    let names = Dictionary(
+                        CatalogStore.shared.workouts
+                            .flatMap { $0.days }.flatMap { $0.exercises }
+                            .map { ($0.exerciseId, $0.name) },
+                        uniquingKeysWith: { first, _ in first })
+                    guard SessionStore.shared.adopt(pending, nameFor: { names[$0] ?? "Esercizio" })
+                    else {
+                        error = "Questo allenamento è stato creato con una versione precedente e non si può riprendere dal Watch."
+                        pendingAdoption = nil
+                        return
+                    }
+                    Task {
+                        guard await WorkoutController.shared.requestAuth() else {
+                            error = "Senza accesso a Salute non posso registrare l'allenamento."
+                            SessionStore.shared.close()
+                            return
+                        }
+                        _ = await RestNotifier.requestPermission()
+                        do { try await WorkoutController.shared.start() }
+                        catch {
+                            SessionStore.shared.close()
+                            self.error = error.localizedDescription
+                        }
+                        pendingAdoption = nil
+                    }
+                })
                 .overlay(alignment: .bottom) {
                     // Precedenza al salvataggio fallito, anche se `error` è
                     // più recente: un `.failed` non ancora riconosciuto
@@ -70,6 +105,13 @@ struct ContentView: View {
                 Task { @MainActor in SessionStore.shared.apply(msg) }
             }
             PhoneLink.shared.activate()
+            // Solo se non è già in corso una sessione al polso: altrimenti
+            // un aggancio arrivato in ritardo rimpiazzerebbe silenziosamente
+            // un allenamento già iniziato qui.
+            PhoneLink.shared.requestState { payload in
+                guard let payload, SessionStore.shared.session == nil else { return }
+                pendingAdoption = payload
+            }
         }
     }
 }

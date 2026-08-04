@@ -5,6 +5,11 @@ struct PickerView: View {
     /// Invocata con la giornata scelta. Chi la consuma apre la sessione:
     /// questa vista non sa nulla di HealthKit.
     var onPick: (CachedWorkout, CachedDay) -> Void
+    /// Sessione già aperta sull'iPhone, se ce n'è una da riprendere. Questa
+    /// vista non possiede lo stato dell'aggancio: lo riceve e segnala
+    /// l'intenzione con `onAdopt`, come già fa con `onPick`.
+    var adoption: [String: Any]?
+    var onAdopt: () -> Void
 
     var body: some View {
         if catalog.workouts.isEmpty {
@@ -16,6 +21,16 @@ struct PickerView: View {
             }
         } else {
             List {
+                if let adoption, let title = adoption["day_name"] as? String {
+                    Section {
+                        Button("Riprendi \(title)") { onAdopt() }
+                        // Non decorativa: prima dell'aggancio non esisteva un
+                        // workout attivo, quindi i biometrici non coprono
+                        // l'inizio della sessione e l'utente deve saperlo.
+                        Text("Frequenza cardiaca e calorie partono da adesso.")
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }
+                }
                 ForEach(catalog.workouts, id: \.id) { w in
                     Section(w.title) {
                         ForEach(w.days, id: \.index) { d in

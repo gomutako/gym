@@ -93,6 +93,49 @@ final class SessionStore: ObservableObject {
         RestNotifier.cancel()
     }
 
+    /// Adotta una sessione già aperta sull'iPhone (aggancio a metà sessione).
+    /// Le serie senza `uid` non sono correlabili: sono sessioni create prima
+    /// che le righe avessero un identificativo stabile (vedi 2739c65), e la
+    /// sessione va rifiutata invece di agganciarsi a indici che cambierebbero
+    /// sotto i piedi se sul telefono si aggiungono o tolgono serie.
+    func adopt(_ payload: [String: Any], nameFor: (String) -> String) -> Bool {
+        guard let cid = payload["client_session_id"] as? String,
+              let log = payload["exercises_log"] as? [[String: Any]],
+              !log.isEmpty else { return false }
+
+        var exercises: [LiveExercise] = []
+        for ex in log {
+            guard let exId = ex["exercise_id"] as? String,
+                  let rows = ex["sets_log"] as? [[String: Any]] else { return false }
+            var sets: [LiveSet] = []
+            for r in rows {
+                guard let uid = r["uid"] as? String else { return false }
+                sets.append(LiveSet(
+                    uid: uid, reps: r["reps"] as? Int, load: r["load"] as? Double,
+                    incline: r["incline"] as? Double,
+                    done: r["done"] as? Bool ?? false,
+                    doneAt: (r["done_at"] as? String)
+                        .flatMap { ISO8601DateFormatter.withFraction.date(from: $0) }))
+            }
+            exercises.append(LiveExercise(
+                exerciseId: exId, name: nameFor(exId),
+                restSeconds: ex["rest_seconds"] as? Int ?? 0,
+                loadType: ex["load_type"] as? String ?? "weight", sets: sets))
+        }
+
+        session = LiveSession(
+            clientSessionId: cid,
+            workoutId: payload["workout_id"] as? String ?? "",
+            workoutTitle: payload["workout_title"] as? String ?? "Allenamento",
+            dayIndex: payload["day_index"] as? Int ?? 0,
+            dayName: payload["day_name"] as? String ?? "",
+            startedAt: (payload["started_at"] as? String)
+                .flatMap { ISO8601DateFormatter.withFraction.date(from: $0) } ?? Date(),
+            exercises: exercises)
+        persist()
+        return true
+    }
+
     // MARK: - Fusione (replica di session-merge.js)
 
     /// Applica un "serie completata". Ritorna true solo se ha cambiato

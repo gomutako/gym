@@ -47,6 +47,14 @@ export async function setContext(payload) {
   await WatchLink.setContext({ payload });
 }
 
+// Copia nativa dello stato della sessione in corso, per rispondere al Watch
+// mentre la WebView dorme (`state_request` risponde il plugin, non il JS).
+// Passare null/undefined la cancella (sessione chiusa o completata).
+export async function setSessionState(payload) {
+  if (!native) return;
+  await WatchLink.setSessionState(payload ? { payload } : {});
+}
+
 // cb riceve il dizionario inviato dal Watch. Ritorna funzione di unsubscribe.
 export function onMessage(cb) {
   if (!native) return () => {};
