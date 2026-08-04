@@ -135,8 +135,66 @@ struct ContentView: View {
                 // watchlink-state.json: uscita esplicita, uscita implicita
                 // (token scaduto/revocato), cancellazione account.
                 if (msg["type"] as? String) == "logout" {
+                    // Il catalogo è dati DELL'ALTRO account (schede, esercizi,
+                    // carichi suggeriti): va sempre svuotato, o il prossimo
+                    // utente lo vedrebbe ancora finché non arriva un nuovo
+                    // push (vedi CatalogStore.clear()).
                     CatalogStore.shared.clear()
-                    Task { @MainActor in SessionStore.shared.close() }
+                    // `pendingAdoption` è la STESSA classe di minaccia, ma sul
+                    // lato lettura: contiene lo snapshot (giornata + intero
+                    // exercises_log) dell'allenamento aperto sull'iPhone
+                    // dell'account che sta uscendo. Senza cancellarlo qui,
+                    // resta nello `@State` di questa view — invisibile finché
+                    // il catalogo è vuoto (PickerView nasconde il banner), ma
+                    // pronto a ricomparire come "Riprendi <giornata>" con le
+                    // serie e i carichi di chi ha appena fatto logout non
+                    // appena arriva il primo `pushCatalog` del prossimo
+                    // utente. Adottarlo non potrebbe scrivere sui dati
+                    // dell'altro account (`resolveSessionId` in
+                    // watch-session.js filtra per `member_id`), ma è comunque
+                    // una lettura a cui il nuovo utente non ha diritto — la
+                    // stessa minaccia per cui sono già passati tre round.
+                    pendingAdoption = nil
+                    // La sessione invece NON è "dati dell'account uscente": è
+                    // lo sforzo fisico che chi ha il Watch al polso sta
+                    // facendo IN QUESTO MOMENTO. Chiuderla incondizionatamente
+                    // (come faceva prima) cancella un allenamento in corso
+                    // ogni volta che il token dell'iPhone scade con lo
+                    // schermo bloccato in tasca — il messaggio "logout" arriva
+                    // anche lì, e in quel caso l'utente non è affatto
+                    // cambiato: non c'è nessuna ragione di privacy per
+                    // interrompergli l'allenamento, la UI cadrebbe su
+                    // PickerView e il recupero (rientrare scegliendo di nuovo
+                    // la giornata) è tutt'altro che ovvio.
+                    //
+                    // Scelta deliberata, non per omissione: non chiudere MAI
+                    // una sessione in corso su "logout", nemmeno quando è un
+                    // logout ESPLICITO con vero cambio di account. Due motivi.
+                    // Primo, il Watch non può distinguere i due casi: lo
+                    // stesso messaggio "logout" arriva sui tre percorsi
+                    // (uscita esplicita, uscita implicita per token
+                    // scaduto/revocato, cancellazione account — vedi
+                    // notifyWatchLogout in watch-session.js), senza portare
+                    // CHI o PERCHÉ. Costruire un comportamento diverso per
+                    // "esplicito" richiederebbe indovinare una distinzione che
+                    // il messaggio non porta. Secondo, anche nel caso peggiore
+                    // (account davvero cambiato, workout lasciato aperto) non
+                    // trapela nulla di nuovo: il rischio è già coperto sul
+                    // lato SCRITTURA da `resolveSessionId`, che filtra sempre
+                    // per `member_id` — un `set_done`/`session_closed` di
+                    // questa sessione non potrà mai applicarsi alla riga di un
+                    // altro account, al più finisce scartato dopo i tentativi
+                    // di retry, esattamente come già succede oggi per un
+                    // client_session_id orfano. Chiuderla a forza qui
+                    // distruggerebbe con certezza uno sforzo fisico reale, la
+                    // stessa classe di perdita che questo branch insegue da
+                    // cinque round, in cambio di un beneficio di privacy che
+                    // nel caso peggiore non si materializza comunque.
+                    Task { @MainActor in
+                        if WorkoutController.shared.state != .running {
+                            SessionStore.shared.close()
+                        }
+                    }
                     return
                 }
                 if CatalogStore.shared.apply(msg) { return }

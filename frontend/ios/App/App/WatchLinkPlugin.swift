@@ -295,7 +295,18 @@ public class WatchLinkPlugin: CAPPlugin, WCSessionDelegate {
     /// `WCSession` arrivano su una coda propria, mai quella main, da cui il
     /// `sync` verso `DispatchQueue.main`.
     private func deliver(_ message: [String: Any]) {
-        let isActive = DispatchQueue.main.sync { UIApplication.shared.applicationState == .active }
+        // Oggi non succede mai: i delegate di WCSession arrivano su una coda
+        // propria, mai quella main (vedi il commento sopra). Ma se un giorno
+        // qualcosa chiamasse `deliver` dal thread principale, un
+        // `DispatchQueue.main.sync` da lì si bloccherebbe per sempre — il
+        // thread aspetterebbe se stesso. Il controllo costa una riga e toglie
+        // questa modalità di guasto.
+        let isActive: Bool
+        if Thread.isMainThread {
+            isActive = UIApplication.shared.applicationState == .active
+        } else {
+            isActive = DispatchQueue.main.sync { UIApplication.shared.applicationState == .active }
+        }
         if isActive, hasListeners("watchMessage") {
             notifyListeners("watchMessage", data: message)
         } else {

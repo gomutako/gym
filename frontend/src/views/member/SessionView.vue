@@ -262,7 +262,11 @@ function startRestFromDoneAt(exI, rowI, doneAtIso, seconds) {
 // SENZA una voce già presente: non deve sovrascrivere un timer in corso.
 function syncRestForDoneRows() {
   log.value.forEach((ex, exI) => {
-    ex.sets_log.forEach((row, rowI) => {
+    // `|| []` come in mergeSetDone (session-merge.js): una riga senza
+    // sets_log (forma legacy) non deve far esplodere questo forEach — un
+    // throw qui scapperebbe dal listener dal vivo PRIMA di `await persist()`
+    // in loadSession(), perdendo l'intera fusione di quel set_done.
+    (ex.sets_log || []).forEach((row, rowI) => {
       if (row.done && row.done_at && restEndsAt[keyOf(exI, rowI)] === undefined) {
         startRestFromDoneAt(exI, rowI, row.done_at, ex.rest_seconds);
       }
@@ -299,6 +303,27 @@ onMounted(() => {
 // watch-session.js.
 let draining = false;
 
+// Coda che serializza QUALUNQUE cosa legga-modifichi-scriva
+// `session.value.exercises_log` da una fonte diversa dal tocco locale
+// sull'interfaccia: il drain del buffer nativo (onVisible, sotto) e la
+// fusione di un `set_done` dal vivo (watchLink.onMessage, in loadSession più
+// in basso). Senza questa serializzazione un `set_done` dal vivo arrivato
+// A METÀ di un drain multi-secondo si fonderebbe sulla copia PRE-drain di
+// `session.value` e la sovrascriverebbe con `persist()`, cancellando la
+// serie che il drain ha già scritto su Supabase — persa anche dal buffer
+// nativo, quindi persa per sempre e in silenzio. Nella direzione opposta, un
+// drain innescato mentre un merge dal vivo sta ancora scrivendo leggerebbe
+// Supabase prima che quella scrittura sia arrivata e la sovrascriverebbe lui.
+// `enqueueWatchOp` mette in fila i due percorsi: qualunque dei due arrivi
+// prima finisce PRIMA che l'altro tocchi `session.value`, quindi chi arriva
+// dopo riparte sempre da uno stato già coerente. Vedi NEW-1 nel report finale.
+let watchOpChain = Promise.resolve();
+function enqueueWatchOp(fn) {
+  const run = watchOpChain.then(fn, fn); // esegue comunque, anche se il precedente ha fallito
+  watchOpChain = run.then(() => {}, () => {}); // non propagare il rifiuto alla prossima coda
+  return run;
+}
+
 async function onVisible() {
   if (document.hidden) return;
   nowTick.value = Date.now();
@@ -314,20 +339,45 @@ async function onVisible() {
   if (draining || !watchLink.isSupported() || !session.value || session.value.completed_at) return;
   draining = true;
   try {
-    const { sessionId } = await drainWatchMessages(authStore.user?.id);
-    // Il drain scrive direttamente su Supabase, non sullo stato reattivo di
-    // questa vista: senza ricaricare, la UI resterebbe con i dati di prima
-    // anche se il database è già aggiornato.
-    if (sessionId && sessionId === session.value.id) {
-      session.value = await getSession(session.value.id);
-      syncRestForDoneRows();
-    }
-  } catch {
-    // Il Watch è opzionale: un drain fallito (rete, Watch irraggiungibile)
-    // non deve bloccare la vista. I messaggi non consumati restano nel
-    // buffer nativo o nella coda di ritentativo per il prossimo giro.
+    await enqueueWatchOp(drainAndRefetch);
   } finally {
     draining = false;
+  }
+}
+
+async function drainAndRefetch() {
+  let sessionId = null;
+  try {
+    ({ sessionId } = await drainWatchMessages(authStore.user?.id));
+  } catch {
+    // Il Watch è opzionale: un drain fallito (rete, Watch irraggiungibile)
+    // non deve bloccare la vista. Nessuna scrittura è avvenuta (getState non
+    // ha nemmeno risposto), quindi non c'è nulla da ricaricare.
+    return;
+  }
+  if (!sessionId || !session.value) return;
+  // Il drain scrive direttamente su Supabase, non sullo stato reattivo di
+  // questa vista: senza ricaricare, la UI (e chiunque stia per fondersi
+  // sopra, vedi `enqueueWatchOp` sopra) resterebbe con i dati di prima anche
+  // se il database è già aggiornato. Refetch INCONDIZIONATO appena il drain
+  // segnala di aver toccato QUALCOSA — non filtrato su
+  // `sessionId === session.value.id`: drainWatchMessages riporta solo
+  // l'ULTIMO id toccato in un batch (watch-session.js), e con messaggi per
+  // due sessioni diverse nello stesso batch quel confronto fallirebbe e
+  // lascerebbe silenziosamente questo log indietro. Un refetch di troppo
+  // costa una query; uno mancato costa una serie persa.
+  try {
+    session.value = await getSession(session.value.id);
+    syncRestForDoneRows();
+  } catch {
+    // Le scritture del drain sono comunque avvenute (sessionId non è null):
+    // a fallire è SOLO la rilettura. Lasciarlo silenzioso, come prima,
+    // significa restare con un log sicuramente disallineato senza che
+    // nessuno lo sappia mai — esattamente la classe di bug per cui questa
+    // vista è stata rifatta più volte. Non recuperabile automaticamente da
+    // qui (il prossimo `persist()` scriverebbe comunque la copia vecchia),
+    // ma va reso visibile invece che ingoiato.
+    error.value = 'Il Watch ha registrato delle serie che non sono state ricaricate: riapri questo allenamento per vederle.';
   }
 }
 
@@ -631,27 +681,36 @@ async function loadSession() {
           return;
         }
         if (msg?.type === 'set_done') {
-          const { log, changed } = mergeSetDone(session.value.exercises_log, {
-            uid: msg.uid, reps: msg.reps, load: msg.load,
-            ...(msg.incline !== undefined ? { incline: msg.incline } : {}),
-            done_at: msg.done_at,
+          // Passa dalla STESSA coda del drain (vedi `enqueueWatchOp` più
+          // sopra): se un drain è in corso (o ne parte uno subito dopo),
+          // questo merge aspetta il proprio turno invece di leggere/scrivere
+          // `session.value` in mezzo a un drain — la fonte di NEW-1. Quando
+          // arriva il proprio turno, `session.value` è già quello che l'ultimo
+          // drain ha lasciato (rifresco incluso), mai la copia PRE-drain.
+          await enqueueWatchOp(async () => {
+            if (!session.value) return; // sessione cambiata/smontata nel frattempo
+            const { log, changed } = mergeSetDone(session.value.exercises_log, {
+              uid: msg.uid, reps: msg.reps, load: msg.load,
+              ...(msg.incline !== undefined ? { incline: msg.incline } : {}),
+              done_at: msg.done_at,
+            });
+            // `changed` false significa che questo fatto era già noto: persistere
+            // e ritrasmettere farebbe rimbalzare lo stesso evento fra i due
+            // dispositivi senza fine.
+            if (!changed) return;
+            session.value.exercises_log = log;
+            // Il design vuole la STESSA scadenza su entrambi i dispositivi
+            // (`done_at + rest_seconds`, vedi SessionStore.restDeadline sul
+            // Watch), ma questo ramo prima non avviava alcun timer: una serie
+            // chiusa al polso restava "fatta" senza recupero in corso sul
+            // telefono, e il tocco successivo su quella riga la annullava
+            // invece di chiudere il recupero (restState leggeva null, non
+            // 'resting'). `syncRestForDoneRows` deriva la scadenza dal
+            // `done_at` fuso, non da `Date.now()` — coerente col ritardo che
+            // il messaggio può aver accumulato.
+            syncRestForDoneRows();
+            await persist();
           });
-          // `changed` false significa che questo fatto era già noto: persistere
-          // e ritrasmettere farebbe rimbalzare lo stesso evento fra i due
-          // dispositivi senza fine.
-          if (!changed) return;
-          session.value.exercises_log = log;
-          // Il design vuole la STESSA scadenza su entrambi i dispositivi
-          // (`done_at + rest_seconds`, vedi SessionStore.restDeadline sul
-          // Watch), ma questo ramo prima non avviava alcun timer: una serie
-          // chiusa al polso restava "fatta" senza recupero in corso sul
-          // telefono, e il tocco successivo su quella riga la annullava
-          // invece di chiudere il recupero (restState leggeva null, non
-          // 'resting'). `syncRestForDoneRows` deriva la scadenza dal
-          // `done_at` fuso, non da `Date.now()` — coerente col ritardo che
-          // il messaggio può aver accumulato.
-          syncRestForDoneRows();
-          await persist();
         }
       });
     }
