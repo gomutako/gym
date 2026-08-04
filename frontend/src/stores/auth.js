@@ -6,6 +6,7 @@ import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { supabase } from '@/lib/supabase';
 import { updateOwnProfile } from '@/lib/data/profiles';
+import * as watchLink from '@/lib/watch';
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(null); // utente Supabase (auth)
@@ -116,6 +117,18 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function logout() {
     await supabase.auth.signOut();
+    // Invariante: la copia nativa (watchlink-state.json, vedi watch.js) non
+    // deve sopravvivere né alla riga che descrive né alla SESSIONE
+    // dell'utente a cui appartiene. Il plugin nativo risponde a
+    // `state_request` solo dal disco, senza sapere chi è loggato: su un
+    // device condiviso o rivenduto, senza questa chiamata il prossimo
+    // utente che apre l'app Watch si vedrebbe offrire "Riprendi" per un
+    // allenamento di un altro account — nome giornata ed esercizi compresi,
+    // non solo un id ormai orfano. Qui e non nelle viste: `logout()` è
+    // l'UNICO punto da cui esce ogni sessione utente (diretto o dentro
+    // ProfileView.confirmDelete), quindi è dove l'invariante va imposto una
+    // volta sola invece che ad ogni chiamante.
+    watchLink.setSessionState(null).catch(() => {});
     user.value = null;
     profile.value = null;
   }

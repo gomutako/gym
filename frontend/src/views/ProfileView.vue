@@ -8,6 +8,7 @@ import { useAuthStore } from '@/stores/auth';
 import { useThemeStore } from '@/stores/theme';
 import { listSubscriptions } from '@/lib/data/subscriptions';
 import { deleteOwnAccount } from '@/lib/data/account';
+import * as watchLink from '@/lib/watch';
 import { listExercises } from '@/lib/data/exercises';
 import { listWorkoutsForMember, setWorkoutActive, setWorkoutArchived } from '@/lib/data/workouts';
 import { avatarUrl, uploadAvatar } from '@/lib/storage';
@@ -302,9 +303,21 @@ async function confirmDelete() {
   deleting.value = true;
   deleteError.value = '';
   try {
+    // Cancellata PRIMA della chiamata di rete, non dopo: l'eliminazione è
+    // irreversibile e l'utente l'ha appena confermata digitando la parola,
+    // quindi qui il rischio che conta è un crash fra "l'account è sparito
+    // dal database" e "la copia sul device è stata cancellata" — che
+    // lascerebbe leggibile a chiunque acceda dopo (device condiviso o
+    // rivenduto) il nome giornata e gli esercizi di un account non più
+    // esistente. Se invece è `deleteOwnAccount()` a fallire (rete), il
+    // costo è solo che l'utente perde per un attimo la possibilità di
+    // riprendere dal Watch un allenamento che comunque sta per eliminare:
+    // un compromesso migliore di lasciare la finestra aperta.
+    watchLink.setSessionState(null).catch(() => {});
     await deleteOwnAccount();
     // La sessione punta a un utente che non esiste più: va chiusa comunque,
-    // anche se il logout fallisce per rete.
+    // anche se il logout fallisce per rete. (auth.logout() ripete la
+    // stessa pulizia: innocuo, la copia è già vuota a questo punto.)
     await auth.logout().catch(() => {});
     deleteOpen.value = false;
     router.push({ name: 'login' });
