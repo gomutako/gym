@@ -58,8 +58,32 @@ export const useAuthStore = defineStore('auth', () => {
     loading.value = false;
 
     supabase.auth.onAuthStateChange((_event, session) => {
+      // Guard su una TRANSIZIONE (c'era un utente, ora non c'è più), non su
+      // un livello: onAuthStateChange spara anche sul refresh del token e
+      // sul ripristino della sessione iniziale (l'evento che arriva subito
+      // dopo questa sottoscrizione, con lo stesso stato appena letto da
+      // getSession() sopra) — casi in cui l'utente resta loggato, e
+      // cancellare lì butterebbe via uno stato adottabile valido sotto i
+      // piedi di una sessione ancora attiva.
+      //
+      // Solo hadUser -> !user.value è un logout IMPLICITO: un refresh token
+      // revocato o scaduto (device inattivo a lungo, password cambiata
+      // altrove, "esci ovunque") fa sì che supabase-js chiami signOut() DA
+      // SÉ e qui arrivi SIGNED_OUT senza che il codice applicativo abbia
+      // mai chiamato logout() — quindi senza questo guard la pulizia di
+      // watchlink-state.json introdotta lì (vedi logout() sotto) non
+      // scatterebbe affatto per questo caso, che è più comune di un logout
+      // esplicito o di una cancellazione account.
+      const hadUser = !!user.value;
       user.value = session?.user ?? null;
       fetchProfile();
+      if (hadUser && !user.value) {
+        // Fire-and-forget come ovunque: un fallimento o una lentezza qui
+        // non deve MAI poter impedire o rallentare l'uscita dell'utente,
+        // che qui non è nemmeno un'azione dell'utente ma un evento
+        // asincrono di supabase-js.
+        watchLink.setSessionState(null).catch(() => {});
+      }
     });
   }
 
