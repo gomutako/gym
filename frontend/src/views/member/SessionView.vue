@@ -432,6 +432,13 @@ async function remove() {
       if (hkUnsub) { hkUnsub(); hkUnsub = null; }
     }
     await deleteSession(session.value.id);
+    // Invariante: la copia nativa non deve mai sopravvivere alla riga che
+    // descrive. Senza questa chiamata il Watch continuerebbe a offrire in
+    // adozione un allenamento appena cancellato: l'utente lo riprenderebbe,
+    // registrerebbe serie al polso contro un client_session_id ormai
+    // orfano, e quei set_done finirebbero scartati dopo i tentativi di
+    // watch-session.js senza che nulla arrivi mai a destinazione.
+    watchLink.setSessionState(null).catch(() => {});
     router.push({ name: 'training' });
   } catch (e) {
     error.value = e.message;

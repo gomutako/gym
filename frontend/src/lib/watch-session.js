@@ -184,6 +184,14 @@ export async function drainWatchMessages(memberId) {
         const id = await resolveSessionId(msg.client_session_id, memberId, cache);
         if (!id) { retry(msg); continue; }
         await updateSession(id, { completed_at: msg.completed_at });
+        // Stessa invariante di SessionView.vue's remove()/complete(): la
+        // copia nativa non deve mai sopravvivere alla riga che descrive.
+        // Questo ramo chiude una sessione SENZA passare da SessionView.vue
+        // (il Watch l'ha terminata da sé, adottata o no) — senza questa
+        // chiamata la copia su watchlink-state.json resterebbe quella di
+        // prima della chiusura, e un state_request successivo offrirebbe
+        // di nuovo in adozione un allenamento già completato.
+        watch.setSessionState(null).catch(() => {});
         touched = id;
       }
     } catch {
