@@ -112,8 +112,14 @@ final class CatalogStore: ObservableObject {
             })
         }
 
+        // `.withFraction`, non un formatter nudo: `toISOString()` lato JS
+        // manda tre decimali, che `ISO8601DateFormatter()` senza
+        // `.withFractionalSeconds` rifiuta SEMPRE, facendo cadere ogni parse
+        // sul fallback `Date()` — l'etichetta "Aggiornato …" leggerebbe
+        // sempre "adesso", indipendentemente da quanto la cache sia vecchia
+        // davvero.
         let stamp = (message["synced_at"] as? String)
-            .flatMap { ISO8601DateFormatter().date(from: $0) } ?? Date()
+            .flatMap { ISO8601DateFormatter.withFraction.date(from: $0) } ?? Date()
 
         DispatchQueue.main.async {
             self.workouts = parsed
@@ -127,6 +133,25 @@ final class CatalogStore: ObservableObject {
         guard let data = try? JSONEncoder().encode(workouts) else { return }
         try? data.write(to: url, options: .atomic)
         UserDefaults.standard.set(syncedAt, forKey: "catalogSyncedAt")
+    }
+
+    /// Cancella la cache locale: titoli, giornate, esercizi e i carichi
+    /// suggeriti per ogni scheda. Invocata alla ricezione del messaggio
+    /// "logout" dall'iPhone — stesso segnale, sugli stessi tre percorsi
+    /// (uscita esplicita, uscita implicita per token scaduto/revocato,
+    /// cancellazione account), che già cancella `watchlink-state.json` lato
+    /// iPhone (vedi `auth.js`/`logout()` e `ProfileView.vue`/`confirmDelete()`).
+    /// Senza questo, su un device condiviso il prossimo utente vedrebbe
+    /// titoli, giornate e carichi suggeriti dell'account precedente finché
+    /// non arriva una nuova `pushCatalog` — la stessa minaccia già coperta
+    /// per la sessione, mai chiusa per il catalogo.
+    func clear() {
+        DispatchQueue.main.async {
+            self.workouts = []
+            self.syncedAt = nil
+            try? FileManager.default.removeItem(at: self.url)
+            UserDefaults.standard.removeObject(forKey: "catalogSyncedAt")
+        }
     }
 
     private func load() {

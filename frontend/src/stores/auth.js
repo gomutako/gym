@@ -7,6 +7,7 @@ import { ref, computed } from 'vue';
 import { supabase } from '@/lib/supabase';
 import { updateOwnProfile } from '@/lib/data/profiles';
 import * as watchLink from '@/lib/watch';
+import { notifyWatchLogout } from '@/lib/watch-session';
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(null); // utente Supabase (auth)
@@ -75,6 +76,7 @@ export const useAuthStore = defineStore('auth', () => {
       // scatterebbe affatto per questo caso, che è più comune di un logout
       // esplicito o di una cancellazione account.
       const hadUser = !!user.value;
+      const oldUserId = user.value?.id; // catturato PRIMA della riassegnazione sotto
       user.value = session?.user ?? null;
       fetchProfile();
       if (hadUser && !user.value) {
@@ -83,6 +85,10 @@ export const useAuthStore = defineStore('auth', () => {
         // che qui non è nemmeno un'azione dell'utente ma un evento
         // asincrono di supabase-js.
         watchLink.setSessionState(null).catch(() => {});
+        // Stessa minaccia, sul Watch: cache catalogo/sessione e coda di
+        // ritentativo non devono sopravvivere a un utente che se n'è
+        // andato, nemmeno per un logout implicito (vedi notifyWatchLogout).
+        notifyWatchLogout(oldUserId);
       }
     });
   }
@@ -140,6 +146,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function logout() {
+    const memberId = user.value?.id; // catturato PRIMA di azzerare user.value sotto
     await supabase.auth.signOut();
     // Invariante: la copia nativa (watchlink-state.json, vedi watch.js) non
     // deve sopravvivere né alla riga che descrive né alla SESSIONE
@@ -153,6 +160,10 @@ export const useAuthStore = defineStore('auth', () => {
     // ProfileView.confirmDelete), quindi è dove l'invariante va imposto una
     // volta sola invece che ad ogni chiamante.
     watchLink.setSessionState(null).catch(() => {});
+    // Stessa invariante, sul Watch: senza questa il catalogo, la sessione e
+    // la coda di ritentativo cache al polso sopravvivono all'utente che le
+    // ha lasciate (vedi notifyWatchLogout).
+    notifyWatchLogout(memberId);
     user.value = null;
     profile.value = null;
   }

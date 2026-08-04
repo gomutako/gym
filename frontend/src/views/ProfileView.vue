@@ -9,6 +9,7 @@ import { useThemeStore } from '@/stores/theme';
 import { listSubscriptions } from '@/lib/data/subscriptions';
 import { deleteOwnAccount } from '@/lib/data/account';
 import * as watchLink from '@/lib/watch';
+import { notifyWatchLogout } from '@/lib/watch-session';
 import { listExercises } from '@/lib/data/exercises';
 import { listWorkoutsForMember, setWorkoutActive, setWorkoutArchived } from '@/lib/data/workouts';
 import { avatarUrl, uploadAvatar } from '@/lib/storage';
@@ -314,6 +315,12 @@ async function confirmDelete() {
     // riprendere dal Watch un allenamento che comunque sta per eliminare:
     // un compromesso migliore di lasciare la finestra aperta.
     watchLink.setSessionState(null).catch(() => {});
+    // Stessa finestra di crash, stessa minaccia sul Watch: catalogo,
+    // sessione e coda di ritentativo cache al polso non devono sopravvivere
+    // a un account appena cancellato (vedi notifyWatchLogout). `user.value`
+    // qui è ancora l'utente che sta per essere cancellato: va letto PRIMA
+    // di `deleteOwnAccount()`, non dopo.
+    notifyWatchLogout(user.value?.id);
     await deleteOwnAccount();
     // La sessione punta a un utente che non esiste più: va chiusa comunque,
     // anche se il logout fallisce per rete. (auth.logout() ripete la

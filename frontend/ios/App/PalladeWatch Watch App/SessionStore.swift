@@ -26,8 +26,10 @@ struct LiveSet: Codable, Hashable {
 struct LiveExercise: Codable, Hashable {
     var exerciseId: String
     var name: String
+    var targetReps: Int?
     var restSeconds: Int
     var loadType: String
+    var hasIncline: Bool
     var sets: [LiveSet]
 }
 
@@ -50,6 +52,11 @@ final class SessionStore: ObservableObject {
     private let url: URL = {
         let dir = FileManager.default.urls(for: .applicationSupportDirectory,
                                            in: .userDomainMask)[0]
+        // Non esiste ancora su un'installazione pulita: senza questo,
+        // `persist()` (che scrive con `try?`) fallirebbe in silenzio finché
+        // qualcos'altro (es. CatalogStore) non avesse già creato la
+        // directory prima.
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("session.json")
     }()
 
@@ -75,8 +82,8 @@ final class SessionStore: ObservableObject {
             startedAt: Date(),
             exercises: day.exercises.map { e in
                 LiveExercise(
-                    exerciseId: e.exerciseId, name: e.name,
-                    restSeconds: e.restSeconds, loadType: e.loadType,
+                    exerciseId: e.exerciseId, name: e.name, targetReps: e.reps,
+                    restSeconds: e.restSeconds, loadType: e.loadType, hasIncline: e.hasIncline,
                     sets: e.suggested.map {
                         LiveSet(uid: UUID().uuidString, reps: $0.reps, load: $0.load,
                                 incline: $0.incline, done: false, doneAt: nil)
@@ -118,9 +125,10 @@ final class SessionStore: ObservableObject {
                         .flatMap { ISO8601DateFormatter.withFraction.date(from: $0) }))
             }
             exercises.append(LiveExercise(
-                exerciseId: exId, name: nameFor(exId),
+                exerciseId: exId, name: nameFor(exId), targetReps: ex["target_reps"] as? Int,
                 restSeconds: ex["rest_seconds"] as? Int ?? 0,
-                loadType: ex["load_type"] as? String ?? "weight", sets: sets))
+                loadType: ex["load_type"] as? String ?? "weight",
+                hasIncline: ex["has_incline"] as? Bool ?? false, sets: sets))
         }
 
         session = LiveSession(

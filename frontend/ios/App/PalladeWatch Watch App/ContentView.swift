@@ -45,8 +45,20 @@ struct ContentView: View {
                         }
                         _ = await RestNotifier.requestPermission()
                         let live = store.begin(workout: w, day: d)
-                        PhoneLink.shared.send(sessionStartedPayload(live), queued: true)
-                        do { try await workout.start() }
+                        // Inviato SOLO dopo che `start()` è tornato: prima
+                        // girava invertito rispetto al flusso della spec
+                        // (startActivity prima dell'invio). Sul percorso di
+                        // fallimento previsto — l'utente ha un altro
+                        // allenamento aperto nell'app Allenamento, `start()`
+                        // lancia dopo il timeout di 8s — `transferUserInfo`
+                        // accodato non si può richiamare indietro: un invio
+                        // anticipato materializzerebbe sull'iPhone una riga
+                        // "in corso" orfana, mai completata, rimovibile solo
+                        // a mano.
+                        do {
+                            try await workout.start()
+                            PhoneLink.shared.send(sessionStartedPayload(live), queued: true)
+                        }
                         catch {
                             store.close()
                             self.error = error.localizedDescription
@@ -76,12 +88,25 @@ struct ContentView: View {
                             return
                         }
                         _ = await RestNotifier.requestPermission()
-                        do { try await WorkoutController.shared.start() }
+                        // `pendingAdoption = nil` SOLO sul successo: prima
+                        // girava dopo il do/catch, quindi scattava anche sul
+                        // fallimento ritentabile di `start()` (l'utente ha
+                        // un altro allenamento aperto altrove) e faceva
+                        // sparire il banner "Riprendi" — l'unico posto da
+                        // cui riparte è `requestState` in `onAppear`, quindi
+                        // dopo aver chiuso l'altro allenamento non c'era più
+                        // modo di tornare indietro. Il ramo di permesso
+                        // negato sopra, che non è ritentabile senza passare
+                        // da Impostazioni, non tocca `pendingAdoption` ed è
+                        // già corretto così.
+                        do {
+                            try await WorkoutController.shared.start()
+                            pendingAdoption = nil
+                        }
                         catch {
                             SessionStore.shared.close()
                             self.error = error.localizedDescription
                         }
-                        pendingAdoption = nil
                     }
                 })
                 .overlay(alignment: .bottom) {
@@ -101,6 +126,19 @@ struct ContentView: View {
         }
         .onAppear {
             PhoneLink.shared.onMessage = { msg in
+                // Messaggio dedicato, non un catalogo/contesto vuoto: dice
+                // esplicitamente cosa significa (l'utente sul telefono è
+                // uscito o l'account non esiste più), invece di lasciare che
+                // CatalogStore.apply lo confonda con un catalogo
+                // legittimamente vuoto. Inviato da watch-session.js sugli
+                // stessi tre percorsi che già cancellano
+                // watchlink-state.json: uscita esplicita, uscita implicita
+                // (token scaduto/revocato), cancellazione account.
+                if (msg["type"] as? String) == "logout" {
+                    CatalogStore.shared.clear()
+                    Task { @MainActor in SessionStore.shared.close() }
+                    return
+                }
                 if CatalogStore.shared.apply(msg) { return }
                 Task { @MainActor in SessionStore.shared.apply(msg) }
             }
@@ -131,8 +169,18 @@ private func sessionStartedPayload(_ s: LiveSession) -> [String: Any] {
         "exercises_log": s.exercises.map { ex in
             [
                 "exercise_id": ex.exerciseId,
+                // `target_reps`/`has_incline`: senza queste due chiavi una
+                // sessione nata al polso arriva sull'iPhone con "3x" invece
+                // di "3x10" e senza colonna inclinazione — `CachedExercise`
+                // le porta già (popolate da watch-catalog.js), ma `begin()`
+                // non le copiava in `LiveExercise`. `target_reps` come gli
+                // altri opzionali di questo payload (`as Any? ?? NSNull()`,
+                // mai `as Any` nudo: un Optional.none incapsulato da solo fa
+                // scartare l'INTERO payload da WatchConnectivity).
+                "target_reps": ex.targetReps as Any? ?? NSNull(),
                 "rest_seconds": ex.restSeconds,
                 "load_type": ex.loadType,
+                "has_incline": ex.hasIncline,
                 "sets_log": ex.sets.map { r -> [String: Any] in
                     // `as Any? ?? NSNull()`, non `as Any`: un Optional.none
                     // incapsulato da solo rende il dizionario non

@@ -5,13 +5,17 @@
 // partire un TIMER di recupero. A fine recupero la riga diventa gialla.
 import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { useAuthStore } from '@/stores/auth';
 import { getSession, updateSession, deleteSession } from '@/lib/data/sessions';
 import { listExercises } from '@/lib/data/exercises';
 import ImageCarousel from '@/components/ImageCarousel.vue';
 import * as healthkit from '@/lib/healthkit';
 import * as restNotify from '@/lib/rest-notifications';
 import * as watchLink from '@/lib/watch';
+import { drainWatchMessages } from '@/lib/watch-session';
 import { mergeSetDone } from '@/lib/session-merge';
+
+const authStore = useAuthStore();
 
 // Immagini di un esercizio del catalogo: tutte (image_paths) o la sola copertina
 const exerciseImages = (ex) =>
@@ -232,6 +236,39 @@ function startRest(exI, rowI, seconds) {
   if (!seconds || seconds <= 0) { restEndsAt[k] = 0; return; } // nessun recupero -> subito pronto
   restEndsAt[k] = Date.now() + seconds * 1000;
 }
+// Come startRest, ma ancora la scadenza a un `done_at` GIÀ accaduto invece
+// che a `Date.now()`: un `set_done` del Watch può arrivare con ritardo (dal
+// buffer nativo dopo un allenamento a schermo spento, o anche dal vivo con
+// pochi secondi di ritardo di rete), e ancorare la scadenza al momento della
+// RICEZIONE allungherebbe il recupero della differenza. Stessa scadenza
+// derivata (`done_at + rest_seconds`) che il Watch calcola in
+// `SessionStore.restDeadline`: qui va ricalcolata, non riletta, perché il
+// messaggio porta solo `done_at`, non la scadenza già pronta. Se `end` cade
+// nel passato, `restRemaining` la clampa comunque a 0 (riga "pronta", non un
+// timer negativo).
+function startRestFromDoneAt(exI, rowI, doneAtIso, seconds) {
+  const k = keyOf(exI, rowI);
+  if (!seconds || seconds <= 0) { restEndsAt[k] = 0; return; }
+  const doneAtMs = doneAtIso ? new Date(doneAtIso).getTime() : NaN;
+  restEndsAt[k] = Number.isNaN(doneAtMs) ? Date.now() + seconds * 1000 : doneAtMs + seconds * 1000;
+}
+// Rete di sicurezza per righe segnate "fatte" da un canale che non passa da
+// startRest/startRestFromDoneAt: il drain del buffer nativo (vedi onVisible)
+// scrive direttamente su Supabase e poi ricarica `session.value`, saltando
+// qualunque chiamata di timer. Senza questo, una riga così risulterebbe
+// "fatta" ma senza recupero in corso (`restState` null) — il prossimo tocco
+// la annullerebbe invece di chiudere il recupero, lo stesso sintomo per cui
+// esiste `startRestFromDoneAt`, per una via diversa. Tocca solo le righe
+// SENZA una voce già presente: non deve sovrascrivere un timer in corso.
+function syncRestForDoneRows() {
+  log.value.forEach((ex, exI) => {
+    ex.sets_log.forEach((row, rowI) => {
+      if (row.done && row.done_at && restEndsAt[keyOf(exI, rowI)] === undefined) {
+        startRestFromDoneAt(exI, rowI, row.done_at, ex.rest_seconds);
+      }
+    });
+  });
+}
 function clearRest(exI, rowI) {
   delete restEndsAt[keyOf(exI, rowI)];
 }
@@ -254,8 +291,44 @@ onMounted(() => {
   document.addEventListener('visibilitychange', onVisible);
 });
 
-function onVisible() {
-  if (!document.hidden) nowTick.value = Date.now();
+// Guardia di rientranza per il drain innescato qui sotto: `visibilitychange`
+// può scattare più volte in rapida sequenza (torna visibile, perde e
+// riguadagna subito il focus), e due drain concorrenti sullo stesso buffer
+// nativo romperebbero l'invariante "una sola coda, un solo consumatore" su
+// cui contano sia WatchLinkPlugin che la coda di ritentativo di
+// watch-session.js.
+let draining = false;
+
+async function onVisible() {
+  if (document.hidden) return;
+  nowTick.value = Date.now();
+  // Il buffer nativo (vedi il commento di `deliver()` in
+  // WatchLinkPlugin.swift) può contenere `set_done`/`session_closed`
+  // accumulati mentre il telefono era in tasca a schermo spento durante
+  // QUESTA sessione. Finora solo `TrainingView.load()` lo svuotava: chi
+  // torna dritto sulla sessione aperta — senza passare dalla lista
+  // allenamenti — li lasciava lì, invisibili, finché non navigava altrove.
+  // Gated sulla sessione ancora in corso: su una già completata non c'è più
+  // nulla da correlare (drainWatchMessages la risolverebbe comunque, ma
+  // sarebbe lavoro sprecato a ogni sblocco schermo).
+  if (draining || !watchLink.isSupported() || !session.value || session.value.completed_at) return;
+  draining = true;
+  try {
+    const { sessionId } = await drainWatchMessages(authStore.user?.id);
+    // Il drain scrive direttamente su Supabase, non sullo stato reattivo di
+    // questa vista: senza ricaricare, la UI resterebbe con i dati di prima
+    // anche se il database è già aggiornato.
+    if (sessionId && sessionId === session.value.id) {
+      session.value = await getSession(session.value.id);
+      syncRestForDoneRows();
+    }
+  } catch {
+    // Il Watch è opzionale: un drain fallito (rete, Watch irraggiungibile)
+    // non deve bloccare la vista. I messaggi non consumati restano nel
+    // buffer nativo o nella coda di ritentativo per il prossimo giro.
+  } finally {
+    draining = false;
+  }
 }
 
 onUnmounted(() => {
@@ -568,6 +641,16 @@ async function loadSession() {
           // dispositivi senza fine.
           if (!changed) return;
           session.value.exercises_log = log;
+          // Il design vuole la STESSA scadenza su entrambi i dispositivi
+          // (`done_at + rest_seconds`, vedi SessionStore.restDeadline sul
+          // Watch), ma questo ramo prima non avviava alcun timer: una serie
+          // chiusa al polso restava "fatta" senza recupero in corso sul
+          // telefono, e il tocco successivo su quella riga la annullava
+          // invece di chiudere il recupero (restState leggeva null, non
+          // 'resting'). `syncRestForDoneRows` deriva la scadenza dal
+          // `done_at` fuso, non da `Date.now()` — coerente col ritardo che
+          // il messaggio può aver accumulato.
+          syncRestForDoneRows();
           await persist();
         }
       });

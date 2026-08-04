@@ -76,6 +76,33 @@ function saveRetryQueue(memberId, queue) {
   }
 }
 
+/**
+ * Notifica il logout al Watch e pulisce la coda di ritentativo locale.
+ *
+ * Stessa minaccia già coperta da `watchLink.setSessionState(null)`, che
+ * cancella solo la copia nativa sull'iPhone (`watchlink-state.json`): le
+ * cache SUL Watch (`catalog.json`, `session.json`) e questa coda restano
+ * altrimenti intatte. Su un device condiviso il prossimo utente vedrebbe
+ * titoli, giornate e carichi suggeriti dell'account precedente al polso
+ * finché non arriva una nuova `pushCatalog`, e un `set_done` di un account
+ * appena cancellato resterebbe in coda per sempre.
+ *
+ * Da chiamare sugli STESSI tre percorsi che già cancellano
+ * `watchlink-state.json`: uscita esplicita (`auth.js`/`logout`), uscita
+ * implicita per token scaduto/revocato (`auth.js`/`init`), cancellazione
+ * account (`ProfileView.vue`/`confirmDelete`). `memberId` può essere
+ * `undefined` (nessun utente noto): in quel caso si pulisce solo la coda
+ * dell'eventuale id non definito, che non esiste, quindi è un no-op
+ * innocuo — il messaggio al Watch parte comunque.
+ */
+export function notifyWatchLogout(memberId) {
+  saveRetryQueue(memberId, []);
+  // `queued: true`: come le altre notifiche di stato (session_closed), deve
+  // arrivare anche se il Watch non è raggiungibile ORA — `transferUserInfo`
+  // resta in coda finché non lo è.
+  watch.send({ type: 'logout' }, { queued: true }).catch(() => {});
+}
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**

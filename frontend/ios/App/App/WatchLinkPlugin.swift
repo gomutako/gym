@@ -19,6 +19,7 @@
 // =====================================================
 import Foundation
 import Capacitor
+import UIKit
 import WatchConnectivity
 
 @objc(WatchLinkPlugin)
@@ -45,6 +46,13 @@ public class WatchLinkPlugin: CAPPlugin, WCSessionDelegate {
     private let stateURL: URL = {
         let dir = FileManager.default.urls(for: .applicationSupportDirectory,
                                            in: .userDomainMask)[0]
+        // Non si può contare sull'ordine di inizializzazione rispetto a
+        // `bufferURL` (creare la directory lì, per un accesso a questa
+        // proprietà per prima su un'installazione pulita la troverebbe
+        // ancora assente): entrambe le create dell'URL devono garantirla da
+        // sole. `setSessionState` scrive con `try?`, quindi senza questo un
+        // primo avvio fallirebbe la scrittura in silenzio.
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("watchlink-state.json")
     }()
 
@@ -269,11 +277,26 @@ public class WatchLinkPlugin: CAPPlugin, WCSessionDelegate {
         deliver(userInfo)
     }
 
-    /// Se c'è un listener JS attivo consegna subito; altrimenti bufferizza.
+    /// Consegna subito SOLO se l'app è attiva in primo piano e c'è un
+    /// listener JS pronto; bufferizza in ogni altro caso.
     /// `retainUntilConsumed` non basta qui: gli eventi sono molti e ordinati,
     /// e vanno anche sopravvissuti alla terminazione del processo.
+    ///
+    /// ⚠️ `hasListeners` da solo NON basta a decidere: `SessionView.vue`
+    /// resta iscritta al listener per l'intera durata di una sessione
+    /// aperta, quindi durante un allenamento normale — telefono in tasca,
+    /// schermo spento, WebView sospesa — `hasListeners` risulta comunque
+    /// vero e ogni messaggio finirebbe dentro un `notifyListeners` che il JS
+    /// sospeso non elabora mai, bypassando il buffer proprio quando serve
+    /// (un `set_done` chiuso al polso durante un'ora di allenamento in
+    /// tasca andrebbe perso se iOS termina il processo). Il segnale giusto è
+    /// se l'app PUÒ ricevere davvero, cioè `applicationState == .active`.
+    /// `UIApplication.shared` va letto sul thread principale: i delegate di
+    /// `WCSession` arrivano su una coda propria, mai quella main, da cui il
+    /// `sync` verso `DispatchQueue.main`.
     private func deliver(_ message: [String: Any]) {
-        if hasListeners("watchMessage") {
+        let isActive = DispatchQueue.main.sync { UIApplication.shared.applicationState == .active }
+        if isActive, hasListeners("watchMessage") {
             notifyListeners("watchMessage", data: message)
         } else {
             store(message)
