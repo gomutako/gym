@@ -288,15 +288,35 @@ Mirroring HealthKit e Live Activity; complicanze e Smart Stack; Watch cellular a
 iPhone accoppiato; modifica di carichi e ripetizioni al polso; Apple Watch come unico
 dispositivo (l'app iPhone resta un prerequisito di installazione).
 
-## Rischi aperti
+## Rischi aperti (aggiornato dopo l'implementazione — Task 12, 2026-08-04)
 
-- **Provisioning.** Un target watchOS richiede un secondo App ID. Il team personale gratuito
-  ne concede un numero limitato e i profili scadono in 7 giorni; che la combinazione
-  App ID watch + entitlement HealthKit passi con il provisioning free **non è verificato**. Da
-  provare per primo, prima di scrivere UI: se non passa, il progetto richiede l'Apple Developer
-  Program a pagamento per essere testato.
-- **`npx cap sync ios` e il progetto Xcode.** Va verificato che la sincronizzazione non
-  rimuova né alteri il target watchOS aggiunto a mano.
+- ✅ **Provisioning: RISOLTO.** Il team personale gratuito firma
+  `it.pallade.app.watchkitapp` con l'entitlement HealthKit. Verificato dal Task 1 con
+  `codesign -d --entitlements :-` sul binario **costruito** (non sui sorgenti):
+  `com.apple.developer.healthkit = true`, team `7M9683Z95M`. Non serve l'Apple Developer
+  Program a pagamento per sviluppare — solo per TestFlight e la pubblicazione, come per il
+  target iPhone. Il build fisico su device resta comunque bloccato finché il Watch non è
+  **registrato** nell'account developer, il che richiede un Run dalla GUI di Xcode:
+  `xcodebuild -allowProvisioningUpdates` non basta da solo (fallisce con *"Device isn't
+  registered in your developer account"* anche con l'entitlement già dimostrato).
+- ✅ **`npx cap sync ios` e il progetto Xcode: RISOLTO, nessun danno.** Verificato lanciando
+  la sincronizzazione dopo l'aggiunta del target watchOS: tocca solo asset web e Pod
+  (`ios/App/App/public`, `Podfile.lock`), non le build settings. `xcodebuild -list`
+  continua a elencare tutti e quattro i target (`App`, `PalladeWatch Watch App` +
+  Tests/UITests) invariati; i build setting specifici del target Watch (typo fix,
+  `WATCHOS_DEPLOYMENT_TARGET`, `INFOPLIST_FILE`) sopravvivono intatti.
+- ⚠️ **Scoperta non prevista dal piano: `INFOPLIST_KEY_WKBackgroundModes` viene scartato in
+  silenzio da Xcode 26.** `GENERATE_INFOPLIST_FILE` mappa nel plist generato solo un elenco
+  curato di chiavi `INFOPLIST_KEY_*`; `WKBackgroundModes` non è fra queste. Impostarla come
+  build setting non produce alcun errore né warning — la chiave semplicemente non compare
+  nel prodotto costruito, e senza `workout-processing` l'intera promessa del background
+  (schermo spento) sarebbe silenziosamente impossibile sul device. Rilevato con `plutil` sul
+  prodotto **costruito**, non deducibile leggendo i build settings. Risolto con un
+  `Info.plist` vero (`frontend/ios/App/PalladeWatch-Watch-App-Info.plist`), referenziato da
+  `INFOPLIST_FILE` — non generato da Xcode. Vedi `CLAUDE.md` § App companion Apple Watch per
+  il comando di verifica da rieseguire dopo ogni modifica alle capability del target Watch.
 - **Duplicazione della fusione in due linguaggi.** Nessuna mitigazione strutturale possibile
   senza introdurre un livello condiviso sproporzionato al problema; si accetta e si copre con
-  test paralleli.
+  test paralleli (`session-merge.js` via script e2e usa-e-getta, `SessionMergeTests.swift` su
+  XCTest nel simulatore watchOS). Confermato nel Task 9: parità regola per regola, incluso il
+  caso limite del `done_at` non parsabile corretto lato JS nel Task 3.

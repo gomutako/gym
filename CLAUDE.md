@@ -126,6 +126,88 @@ xcrun devicectl device process launch --device <UDID> --console it.pallade.app
   la silenzierebbe. Ne esiste una sola alla volta (id costante): riprogrammare sostituisce
   la pendente. Il permesso si chiede al primo "fatto" con recupero; se negato l'app tace e
   non lo richiede più.
+
+### App companion Apple Watch
+
+Target `PalladeWatch Watch App` nello stesso progetto Xcode, bundle id
+`it.pallade.app.watchkitapp` (il prefisso è imposto da watchOS), deployment target
+watchOS 10.6. È **opzionale**: ogni funzione esiste anche senza, e il web non cambia
+comportamento — design completo in
+`docs/superpowers/specs/2026-08-02-watch-companion-design.md`.
+
+- ⚠️ **Su Apple Watch esiste UNA sola sessione di allenamento attiva alla volta, di
+  sistema.** La nostra app *sostituisce* l'app Allenamento durante la palestra e salva un
+  `HKWorkout` a fine sessione — è quello che tiene corretti anelli e cronologia Fitness
+  dell'utente, non un dettaglio estetico. Con un allenamento già attivo altrove
+  `startActivity` può non tornare mai (difetto storico, rdar://45703316): di qui il
+  **timeout esplicito** in `WorkoutController.start()`, altrimenti l'utente resterebbe su
+  una schermata bloccata senza diagnosi.
+- **Aprire una `HKWorkoutSession` è l'UNICO modo con cui una watch app continua a girare a
+  schermo spento** (background mode `workout-processing`). Senza, l'app si sospende
+  nell'istante in cui si abbassa il polso, non dopo un margine di grazia.
+- **L'app Allenamento di Apple non registra esercizi, serie, ripetizioni o carichi** — in
+  HealthKit non esiste nemmeno un tipo di dato per questo. Non c'è nulla da importare da
+  Salute: i dati degli esercizi viaggiano solo iPhone → Watch, mai il contrario.
+- **Trasporto: WatchConnectivity, non il mirroring HealthKit**
+  (`startMirroringToCompanionDevice`). Il risveglio che il mirroring offrirebbe sveglia il
+  processo nativo iOS, non la WebView — che resta sospesa comunque, esattamente come con
+  WatchConnectivity — quindi pagheremmo un'API con difetti documentati
+  (`sendToRemoteWorkoutSession` può fallire con *"Remote session delegate is not set up"*,
+  a volte con oltre mezz'ora di ritardo) per un beneficio che non possiamo incassare.
+- ⚠️ **`INFOPLIST_KEY_WKBackgroundModes` viene scartato IN SILENZIO dal generatore di
+  Info.plist di Xcode 26** (`GENERATE_INFOPLIST_FILE` mappa solo un elenco curato di chiavi
+  `INFOPLIST_KEY_*`; questa non c'è dentro). Nessun errore, nessun warning: la chiave
+  semplicemente non compare nel prodotto costruito, e senza `workout-processing` l'app si
+  sospenderebbe a schermo spento senza che nulla lo segnali. Per questo esiste
+  `frontend/ios/App/PalladeWatch-Watch-App-Info.plist`, referenziato da `INFOPLIST_FILE`
+  nelle build settings del target Watch — un Info.plist vero, non generato. Verificare
+  SEMPRE sul prodotto **costruito**, mai sulla sorgente:
+  `plutil -p ~/Library/Developer/Xcode/DerivedData/App-*/Build/Products/Debug-watchos/'PalladeWatch Watch App.app'/Info.plist | grep -A3 WKBackgroundModes`
+- ⚠️ **Il buffer sta nel plugin nativo (`WatchLinkPlugin.swift`), non nel JS**: quando il
+  Watch invia mentre la WebView è sospesa — il caso normale — il messaggio si accumula lì.
+  `watch.getState()` **SVUOTA** il buffer: chi la chiama deve consumare `pending` per
+  intero, o quelle serie sono perse. `getLink()` è la versione non distruttiva, per leggere
+  solo lo stato del collegamento (paired/installed/reachable) senza toccare i messaggi in
+  coda — usare quella quando non si vuole drenare nulla.
+- ⚠️ **Le serie si referenziano per `uid`, mai per posizione** (`sets_log[i]`):
+  `addSet`/`removeSet` sull'iPhone spostano gli indici, quindi un messaggio dal Watch che
+  dice "fatta la serie 2" può atterrare sulla riga sbagliata se sull'iPhone la lista è
+  cambiata nel frattempo. Le sessioni create prima del 2026-08-02 non hanno `uid` sulle
+  righe di `sets_log` e il Watch le rifiuta esplicitamente invece di indovinare l'indice.
+- **La fusione delle serie completate è duplicata deliberatamente** in
+  `frontend/src/lib/session-merge.js` e in `SessionStore.swift`, perché watchOS non esegue
+  JavaScript e non c'è modo di condividerla. Le due implementazioni sono provate sugli
+  stessi casi (script e2e usa-e-getta per la JS, `SessionMergeTests.swift` per la Swift):
+  modificare una regola senza portarla nell'altro file fa divergere i due dispositivi **in
+  silenzio**, senza errore visibile da nessuna parte.
+- **Il timer di recupero non è stato sincronizzato**: è la scadenza derivata
+  `done_at + rest_seconds`, che iPhone e Watch calcolano identica dai propri dati. Proprio
+  per questo la sospensione della WebView (o del processo Watch) non può corromperlo — non
+  c'è un countdown da riprendere, solo un confronto con l'orologio di sistema al risveglio.
+- ⚠️ **Un optional in un payload WatchConnectivity va scritto `as Any? ?? NSNull()`, mai un
+  semplice `as Any`**: un `Optional.none` boxato con `as Any` non è deserializzabile da
+  WatchConnectivity, che scarta l'**intero messaggio** (non solo il campo) senza sollevare
+  — colpisce proprio i casi comuni, come `load` nil per un esercizio mai fatto prima.
+  Eccezione deliberata: `incline`, OMESSO quando `nil` invece di forzato a `NSNull()`, per
+  preservare la distinzione fra "campo assente" e "campo esplicitamente null" su cui si
+  regge `session-merge.js`.
+- **Lo stato nativo della sessione** (`watchlink-state.json`, copia su disco che risponde a
+  `state_request` anche a WebView sospesa) **non deve mai sopravvivere né alla riga
+  Supabase che descrive né all'utente a cui appartiene**: viene azzerato al completamento,
+  alla cancellazione, alla chiusura lato Watch, alla cancellazione account, al logout
+  esplicito **e** al sign-out implicito (token scaduto, "esci ovunque", cambio password
+  altrove — supabase-js chiama `signOut()` da sé, senza passare da `logout()`). Un file
+  rimasto vivo offrirebbe a chi usa dopo lo stesso device — condiviso, rivenduto — "Riprendi"
+  su una sessione di un altro account, nome giornata ed esercizi compresi.
+- ⚠️ **`@Published`/`ObservableObject` su questo toolchain richiedono `import Combine`
+  esplicito**, non è implicito come altrove: senza, la build fallisce a compile-time. È
+  costato tempo ripetutamente nel progetto (`PhoneLink.swift`, `CatalogStore.swift`,
+  `WorkoutController.swift`, `SessionStore.swift`) — aggiungerlo per primo in ogni nuovo
+  file Swift con stato osservabile.
+- **Registrare un Apple Watch per lo sviluppo richiede un Run dalla GUI di Xcode**:
+  `xcodebuild -allowProvisioningUpdates` non basta da solo, anche con l'iPhone collegato e
+  il Watch accoppiato — fallisce con *"Device isn't registered in your developer account"*
+  finché non si fa quel Run manuale una volta.
 - Per il simulatore vale lo stesso ciclo con
   `-destination 'platform=iOS Simulator,name=iPhone 16 Pro'` e `xcrun simctl`. Ricordare
   che nel simulatore l'app punta al **Supabase locale**: serve `npm run db:start` attivo,
