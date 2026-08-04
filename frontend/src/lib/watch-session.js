@@ -94,13 +94,25 @@ function saveRetryQueue(memberId, queue) {
  * `undefined` (nessun utente noto): in quel caso si pulisce solo la coda
  * dell'eventuale id non definito, che non esiste, quindi è un no-op
  * innocuo — il messaggio al Watch parte comunque.
+ *
+ * `explicit` distingue un'uscita VOLUTA (il pulsante nel profilo, la
+ * cancellazione account) da una IMPLICITA (refresh token scaduto o revocato
+ * su un telefono fermo a lungo). Il Watch se ne serve per decidere che fare
+ * di un allenamento in corso al polso: su un'uscita voluta l'utente ha detto
+ * che il telefono non è più suo, e continuare significherebbe solo tenere a
+ * schermo giornata, esercizi e carichi di chi è appena uscito — le serie non
+ * sarebbero comunque più salvabili, perché `resolveSessionId` qui sotto
+ * risolve solo dentro il `member_id` di chi è connesso. Su un'uscita
+ * implicita l'utente non è cambiato e rientrerà: interrompergli
+ * l'allenamento sarebbe distruggere uno sforzo fisico reale per un evento di
+ * cui non si è nemmeno accorto. Vedi il gestore `logout` in ContentView.swift.
  */
-export function notifyWatchLogout(memberId) {
+export function notifyWatchLogout(memberId, { explicit = false } = {}) {
   saveRetryQueue(memberId, []);
   // `queued: true`: come le altre notifiche di stato (session_closed), deve
   // arrivare anche se il Watch non è raggiungibile ORA — `transferUserInfo`
   // resta in coda finché non lo è.
-  watch.send({ type: 'logout' }, { queued: true }).catch(() => {});
+  watch.send({ type: 'logout', explicit }, { queued: true }).catch(() => {});
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

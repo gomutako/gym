@@ -303,25 +303,120 @@ onMounted(() => {
 // watch-session.js.
 let draining = false;
 
-// Coda che serializza QUALUNQUE cosa legga-modifichi-scriva
-// `session.value.exercises_log` da una fonte diversa dal tocco locale
-// sull'interfaccia: il drain del buffer nativo (onVisible, sotto) e la
-// fusione di un `set_done` dal vivo (watchLink.onMessage, in loadSession più
-// in basso). Senza questa serializzazione un `set_done` dal vivo arrivato
-// A METÀ di un drain multi-secondo si fonderebbe sulla copia PRE-drain di
-// `session.value` e la sovrascriverebbe con `persist()`, cancellando la
-// serie che il drain ha già scritto su Supabase — persa anche dal buffer
-// nativo, quindi persa per sempre e in silenzio. Nella direzione opposta, un
-// drain innescato mentre un merge dal vivo sta ancora scrivendo leggerebbe
-// Supabase prima che quella scrittura sia arrivata e la sovrascriverebbe lui.
-// `enqueueWatchOp` mette in fila i due percorsi: qualunque dei due arrivi
-// prima finisce PRIMA che l'altro tocchi `session.value`, quindi chi arriva
-// dopo riparte sempre da uno stato già coerente. Vedi NEW-1 nel report finale.
-let watchOpChain = Promise.resolve();
-function enqueueWatchOp(fn) {
-  const run = watchOpChain.then(fn, fn); // esegue comunque, anche se il precedente ha fallito
-  watchOpChain = run.then(() => {}, () => {}); // non propagare il rifiuto alla prossima coda
+// ============================================================
+// INVARIANTE DEL LOG — leggere prima di toccare qualunque cosa scriva
+// `exercises_log`.
+//
+// Non si scrive MAI sul server un `exercises_log` più vecchio di quello che
+// il server ha già. `updateSession` sostituisce il documento INTERO, non fa
+// una patch per riga: due percorsi che lo leggono-modificano-riscrivono in
+// parallelo non si fondono, l'ultimo che scrive cancella tutto quello che
+// l'altro aveva aggiunto — e ciò che sparisce sono serie che una persona ha
+// davvero eseguito.
+//
+// Il caso che ha reso necessario scriverlo qui, che è la sequenza NORMALE di
+// fine allenamento: finisci al polso, riprendi in mano il telefono (il
+// rientro in foreground fa partire il drain del buffer nativo, che riversa
+// su Supabase le serie chiuse al polso — due o tre round trip per messaggio,
+// quindi svariati secondi per un allenamento da venti serie) e tocchi
+// "Termina allenamento" prima che finisca. `complete()` invia la SUA copia,
+// quella di PRIMA del drain, insieme a `completed_at`: ogni serie appena
+// scritta dal drain sparisce. E non è recuperabile da nessuna parte — il
+// buffer nativo è già stato consumato, e `onVisible` non ridrena una
+// sessione ormai completata.
+//
+// Come l'invariante viene imposta, senza che nessuno debba ricordarsene:
+//  1. `writeLog()` è l'UNICO punto del file che passa `exercises_log` a
+//     `updateSession`. Aggiungerne un secondo riapre il buco: se serve
+//     scrivere altri campi insieme al log, si passano a `writeLog(extra)`.
+//  2. `writeLog()` si chiama solo da dentro `enqueueLogOp`, che ne
+//     serializza le esecuzioni. Chi scrive dall'interfaccia non lo tocca:
+//     chiama `persist()`, che fa già entrambe le cose. Un writer nuovo
+//     (un campo in più nella riga, un pulsante nuovo) chiama `persist()`
+//     come gli altri cinque e non ha bisogno di sapere niente di tutto
+//     questo.
+//  3. Il drain NON sostituisce il log locale con quello del server: ci
+//     FONDE dentro le serie che il server riporta fatte
+//     (`reconcileWithRemote` + `mergeRemoteDone`). Sostituirlo butterebbe
+//     via le modifiche locali non ancora scritte — per esempio un "fatto"
+//     toccato mentre il drain era in volo.
+//  4. Se la riconciliazione fallisce sappiamo di avere una copia vecchia:
+//     `logStale` resta true e `writeLog()` RIFIUTA di scrivere finché non
+//     riesce a rileggere. Meglio un errore visibile che sovrascrivere in
+//     silenzio delle serie vere.
+//
+// ⚠️ Il tocco su "fatto" non aspetta niente di tutto questo: la riga si
+// segna eseguita in locale, in modo sincrono, e la scrittura parte per conto
+// suo. È una palestra, il pulsante deve rispondere subito. Non trasformare
+// `persist()` in qualcosa che l'interfaccia debba attendere.
+// ============================================================
+let logOpChain = Promise.resolve();
+function enqueueLogOp(fn) {
+  const run = logOpChain.then(fn, fn); // esegue comunque, anche se il precedente ha fallito
+  logOpChain = run.then(() => {}, () => {}); // non propagare il rifiuto alla prossima coda
   return run;
+}
+
+// Sappiamo che il server ha serie che questa copia non ha: il drain le ha
+// scritte ma la rilettura è fallita. Finché è true nessuna scrittura può
+// partire — scriverebbe la copia vecchia SOPRA quelle serie. È anche il
+// messaggio mostrato all'utente, in un riquadro suo: non passa da `error`,
+// che ogni operazione riuscita azzera, altrimenti l'avviso verrebbe
+// cancellato proprio dall'operazione contro cui deve mettere in guardia.
+const logStale = ref(false);
+
+// uid annullati in locale e non ancora scritti sul server. La fusione col
+// remoto deve saltarli: lì la serie risulta ancora "fatta" (l'annullamento
+// non è ancora partito) e `mergeSetDone` la rimetterebbe a done —
+// resuscitando una serie che l'utente ha appena tolto.
+const pendingUndo = new Set();
+
+// Fonde nel log LOCALE le serie che il server riporta come fatte, invece di
+// sostituire il documento. Passa dalla stessa `mergeSetDone` usata dal vivo
+// e dal drain, quindi valgono le stesse tre regole (il fatto vince sul non
+// fatto; a parità, vince il `done_at` più vecchio; l'annullamento non passa
+// mai di qui) senza una seconda copia della logica da tenere allineata.
+function mergeRemoteDone(localLog, remoteLog) {
+  if (!Array.isArray(remoteLog)) return localLog;
+  let out = Array.isArray(localLog) ? localLog : [];
+  remoteLog.forEach((ex) => {
+    (ex.sets_log || []).forEach((row) => {
+      if (!row.done || !row.done_at || !row.uid) return;
+      if (pendingUndo.has(row.uid)) return;
+      ({ log: out } = mergeSetDone(out, {
+        uid: row.uid, reps: row.reps, load: row.load,
+        ...(row.incline !== undefined ? { incline: row.incline } : {}),
+        done_at: row.done_at,
+      }));
+    });
+  });
+  return out;
+}
+
+// Rilegge la sessione dal server e la riallinea con la copia locale. Tutti i
+// campi tranne il log si prendono dal server (biometrici, `completed_at` di
+// una sessione chiusa dal polso…); il log si FONDE, per il punto 3
+// dell'invariante qui sopra.
+async function reconcileWithRemote() {
+  if (!session.value) return false;
+  const id = session.value.id;
+  try {
+    const remote = await getSession(id);
+    // La sessione può essere cambiata sotto (navigazione su un altro id
+    // mentre la rilettura era in volo): fondere qui il log di un'altra
+    // sessione sarebbe peggio del problema che stiamo risolvendo.
+    if (session.value?.id !== id) return true;
+    session.value = {
+      ...remote,
+      exercises_log: mergeRemoteDone(session.value.exercises_log, remote.exercises_log),
+    };
+    syncRestForDoneRows();
+    logStale.value = false;
+    return true;
+  } catch {
+    if (session.value?.id === id) logStale.value = true;
+    return false;
+  }
 }
 
 async function onVisible() {
@@ -339,46 +434,34 @@ async function onVisible() {
   if (draining || !watchLink.isSupported() || !session.value || session.value.completed_at) return;
   draining = true;
   try {
-    await enqueueWatchOp(drainAndRefetch);
+    await enqueueLogOp(drainAndReconcile);
   } finally {
     draining = false;
   }
 }
 
-async function drainAndRefetch() {
+async function drainAndReconcile() {
   let sessionId = null;
   try {
     ({ sessionId } = await drainWatchMessages(authStore.user?.id));
   } catch {
     // Il Watch è opzionale: un drain fallito (rete, Watch irraggiungibile)
     // non deve bloccare la vista. Nessuna scrittura è avvenuta (getState non
-    // ha nemmeno risposto), quindi non c'è nulla da ricaricare.
+    // ha nemmeno risposto), quindi non c'è nulla da riallineare.
     return;
   }
-  if (!sessionId || !session.value) return;
   // Il drain scrive direttamente su Supabase, non sullo stato reattivo di
-  // questa vista: senza ricaricare, la UI (e chiunque stia per fondersi
-  // sopra, vedi `enqueueWatchOp` sopra) resterebbe con i dati di prima anche
-  // se il database è già aggiornato. Refetch INCONDIZIONATO appena il drain
-  // segnala di aver toccato QUALCOSA — non filtrato su
-  // `sessionId === session.value.id`: drainWatchMessages riporta solo
-  // l'ULTIMO id toccato in un batch (watch-session.js), e con messaggi per
-  // due sessioni diverse nello stesso batch quel confronto fallirebbe e
-  // lascerebbe silenziosamente questo log indietro. Un refetch di troppo
-  // costa una query; uno mancato costa una serie persa.
-  try {
-    session.value = await getSession(session.value.id);
-    syncRestForDoneRows();
-  } catch {
-    // Le scritture del drain sono comunque avvenute (sessionId non è null):
-    // a fallire è SOLO la rilettura. Lasciarlo silenzioso, come prima,
-    // significa restare con un log sicuramente disallineato senza che
-    // nessuno lo sappia mai — esattamente la classe di bug per cui questa
-    // vista è stata rifatta più volte. Non recuperabile automaticamente da
-    // qui (il prossimo `persist()` scriverebbe comunque la copia vecchia),
-    // ma va reso visibile invece che ingoiato.
-    error.value = 'Il Watch ha registrato delle serie che non sono state ricaricate: riapri questo allenamento per vederle.';
-  }
+  // questa vista: senza riallineare, la copia locale resterebbe indietro e
+  // la prossima scrittura la rimetterebbe SOPRA le serie appena scritte.
+  // Riallineamento INCONDIZIONATO appena il drain segnala di aver toccato
+  // QUALCOSA — non filtrato su `sessionId === session.value.id`:
+  // drainWatchMessages riporta solo l'ULTIMO id toccato in un batch
+  // (watch-session.js), e con messaggi per due sessioni diverse nello stesso
+  // batch quel confronto fallirebbe e lascerebbe silenziosamente questo log
+  // indietro. Una rilettura di troppo costa una query; una mancata costa una
+  // serie persa.
+  if (!sessionId) return;
+  await reconcileWithRemote();
 }
 
 onUnmounted(() => {
@@ -391,31 +474,62 @@ onUnmounted(() => {
 });
 
 // --- Persistenza (salva tutto il log esercizi) ---
-async function persist() {
-  error.value = '';
-  try {
-    await updateSession(session.value.id, {
-      exercises_log: session.value.exercises_log,
-    });
-    // Copia nativa per l'aggancio del Watch: la richiesta arriva quando la
-    // WebView è sospesa e non potrebbe rispondere in tempo. Solo se la
-    // sessione è ancora in corso: su una completata (storico modificabile,
-    // gli input restano attivi anche qui) risveglierebbe uno stato "da
-    // riprendere" per un allenamento già chiuso.
-    if (!session.value.completed_at) {
-      watchLink.setSessionState({
-        client_session_id: watchSessionKey.value,
-        workout_id: session.value.workout_id,
-        workout_title: session.value.workout_title,
-        day_index: session.value.day_index,
-        day_name: session.value.day_name,
-        started_at: session.value.started_at,
-        exercises_log: session.value.exercises_log,
-      }).catch(() => {});
-    }
-  } catch (e) {
-    error.value = e.message;
+//
+// L'UNICO punto del file che scrive `exercises_log`, e va chiamato SOLO da
+// dentro `enqueueLogOp` — vedi il blocco INVARIANTE DEL LOG più sopra.
+// `extra` serve a chi deve scrivere altri campi NELLO STESSO documento
+// (`complete()`: `completed_at` e i biometrici): passarli di qui è ciò che
+// impedisce che nasca una seconda scrittura del log fuori dalla coda.
+async function writeLog(extra) {
+  if (!session.value) return;
+  // Sappiamo di avere una copia più vecchia di quella del server: prima si
+  // riprova a rileggerla, e se non ci si riesce NON si scrive. Scrivere qui
+  // cancellerebbe le serie che il drain ha già messo su Supabase, senza che
+  // nessuno se ne accorga mai — il caso terminale descritto nell'invariante.
+  if (logStale.value && !(await reconcileWithRemote())) {
+    throw new Error('Non riesco a rileggere le serie registrate dal Watch, e salvare adesso le cancellerebbe. Controlla la connessione e riapri l\'allenamento.');
   }
+  // Fotografia PRIMA della scrittura: gli annullamenti fatti mentre questa
+  // è in volo non sono in questo documento e devono restare protetti dalla
+  // fusione col remoto finché non li scrive la persist successiva.
+  const undone = [...pendingUndo];
+  const id = session.value.id;
+  const closing = !!extra?.completed_at;
+  await updateSession(id, { exercises_log: session.value.exercises_log, ...extra });
+  undone.forEach((u) => pendingUndo.delete(u));
+  // Copia nativa per l'aggancio del Watch: la richiesta arriva quando la
+  // WebView è sospesa e non potrebbe rispondere in tempo. Solo se la
+  // sessione è ancora in corso: su una completata (storico modificabile,
+  // gli input restano attivi anche qui) o su quella che stiamo chiudendo
+  // proprio ora risveglierebbe uno stato "da riprendere" per un allenamento
+  // già chiuso.
+  if (session.value?.id === id && !session.value.completed_at && !closing) {
+    watchLink.setSessionState({
+      client_session_id: watchSessionKey.value,
+      workout_id: session.value.workout_id,
+      workout_title: session.value.workout_title,
+      day_index: session.value.day_index,
+      day_name: session.value.day_name,
+      started_at: session.value.started_at,
+      exercises_log: session.value.exercises_log,
+    }).catch(() => {});
+  }
+}
+
+// Il writer che usa l'interfaccia: "fatto"/annulla, aggiungi/togli serie,
+// modifica di ripetizioni, carico e pendenza. La mutazione locale è già
+// avvenuta in modo sincrono nel gestore del tocco; qui parte solo la
+// scrittura, in coda dietro a quelle già in corso. NESSUN chiamante la
+// attende, ed è voluto: vedi l'avvertenza in fondo all'invariante.
+async function persist() {
+  return enqueueLogOp(async () => {
+    try {
+      await writeLog();
+      error.value = '';
+    } catch (e) {
+      error.value = e.message;
+    }
+  });
 }
 
 // Pulsante della serie, tre comportamenti in base allo stato:
@@ -478,6 +592,12 @@ function onSetButton(exI, rowI) {
   } else {
     row.done = false;
     row.done_at = null;
+    // Il server riporta ancora questa serie come fatta finché la persist
+    // qui sotto non arriva: senza segnarla, una riconciliazione col remoto
+    // che capitasse nel frattempo la rimetterebbe a "fatta" (mergeSetDone
+    // fa vincere il fatto sul non fatto) e l'annullamento appena chiesto
+    // dall'utente sparirebbe sotto le sue dita.
+    pendingUndo.add(row.uid);
     clearRest(exI, rowI);
     persist();
     restNotify.cancel(keyOf(exI, rowI)).catch(() => {});
@@ -524,11 +644,16 @@ async function complete() {
         // biometrici opzionali: non bloccare il completamento della sessione
       }
     }
-    await updateSession(session.value.id, {
-      exercises_log: session.value.exercises_log,
+    // In coda come ogni altra scrittura del log, e leggendo
+    // `session.value.exercises_log` solo QUANDO tocca a lei: se un drain è
+    // in volo (la sequenza normale — hai finito al polso e ora prendi il
+    // telefono), questa chiusura aspetta che abbia finito e riparte dal log
+    // riallineato. Prima leggeva la copia pre-drain e la scriveva insieme a
+    // `completed_at`, cancellando per sempre le serie appena riversate.
+    await enqueueLogOp(() => writeLog({
       completed_at: new Date().toISOString(),
       ...(biometrics_json ? { biometrics_json } : {}),
-    });
+    }));
     // La sessione è chiusa: niente più da riprendere dal Watch.
     watchLink.setSessionState(null).catch(() => {});
     restNotify.cancel().catch(() => {});
@@ -607,6 +732,12 @@ async function loadSession() {
   // giallo) di quella vecchia, anche se in quella nuova non è mai stata
   // segnata. Su un mount fresco è già vuota, quindi qui non cambia nulla.
   Object.keys(restEndsAt).forEach((k) => delete restEndsAt[k]);
+  // Entrambi descrivono il rapporto fra la copia locale e la riga sul
+  // server di UNA sessione: portarli su un'altra sessione bloccherebbe le
+  // sue scritture (logStale) o proteggerebbe dalla fusione degli uid che lì
+  // non esistono nemmeno (pendingUndo).
+  logStale.value = false;
+  pendingUndo.clear();
   try {
     [session.value, catalog.value] = await Promise.all([
       getSession(route.params.id),
@@ -681,13 +812,13 @@ async function loadSession() {
           return;
         }
         if (msg?.type === 'set_done') {
-          // Passa dalla STESSA coda del drain (vedi `enqueueWatchOp` più
-          // sopra): se un drain è in corso (o ne parte uno subito dopo),
-          // questo merge aspetta il proprio turno invece di leggere/scrivere
-          // `session.value` in mezzo a un drain — la fonte di NEW-1. Quando
-          // arriva il proprio turno, `session.value` è già quello che l'ultimo
-          // drain ha lasciato (rifresco incluso), mai la copia PRE-drain.
-          await enqueueWatchOp(async () => {
+          // Passa dalla STESSA coda di tutte le altre scritture del log
+          // (vedi l'invariante più sopra): se un drain è in corso (o ne
+          // parte uno subito dopo), questa fusione aspetta il proprio turno
+          // invece di leggere e scrivere `session.value` in mezzo a un
+          // drain. Quando arriva il suo turno, `session.value` è già quello
+          // che l'ultimo drain ha lasciato, mai la copia PRE-drain.
+          await enqueueLogOp(async () => {
             if (!session.value) return; // sessione cambiata/smontata nel frattempo
             const { log, changed } = mergeSetDone(session.value.exercises_log, {
               uid: msg.uid, reps: msg.reps, load: msg.load,
@@ -709,7 +840,16 @@ async function loadSession() {
             // `done_at` fuso, non da `Date.now()` — coerente col ritardo che
             // il messaggio può aver accumulato.
             syncRestForDoneRows();
-            await persist();
+            // `writeLog()` e non `persist()`: siamo GIÀ dentro la coda, e
+            // rimettersi in fila dietro sé stessi vorrebbe dire aspettare
+            // per sempre un turno che non arriva mai — bloccando anche
+            // tutte le scritture successive.
+            try {
+              await writeLog();
+              error.value = '';
+            } catch (e) {
+              error.value = e.message;
+            }
           });
         }
       });
@@ -733,6 +873,15 @@ watch(() => route.params.id, loadSession);
 <template>
   <div class="space-y-4">
     <p v-if="error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
+    <!-- Riquadro SEPARATO da `error`: quell'altro viene azzerato da ogni
+         operazione riuscita, e questo avviso verrebbe cancellato proprio
+         dall'operazione contro cui mette in guardia. Resta finché la
+         rilettura non riesce (writeLog la ritenta prima di ogni scrittura). -->
+    <p v-if="logStale" class="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+      Il Watch ha registrato delle serie che non sono state ricaricate: finché non
+      si rileggono, l'allenamento non viene salvato per non cancellarle. Controlla
+      la connessione e riapri questo allenamento.
+    </p>
     <p v-if="loading" class="text-sm text-gray-400">Caricamento…</p>
 
     <template v-else-if="session">

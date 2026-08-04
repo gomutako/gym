@@ -155,44 +155,54 @@ struct ContentView: View {
                     // una lettura a cui il nuovo utente non ha diritto — la
                     // stessa minaccia per cui sono già passati tre round.
                     pendingAdoption = nil
-                    // La sessione invece NON è "dati dell'account uscente": è
-                    // lo sforzo fisico che chi ha il Watch al polso sta
-                    // facendo IN QUESTO MOMENTO. Chiuderla incondizionatamente
-                    // (come faceva prima) cancella un allenamento in corso
-                    // ogni volta che il token dell'iPhone scade con lo
-                    // schermo bloccato in tasca — il messaggio "logout" arriva
-                    // anche lì, e in quel caso l'utente non è affatto
-                    // cambiato: non c'è nessuna ragione di privacy per
-                    // interrompergli l'allenamento, la UI cadrebbe su
-                    // PickerView e il recupero (rientrare scegliendo di nuovo
-                    // la giornata) è tutt'altro che ovvio.
-                    //
-                    // Scelta deliberata, non per omissione: non chiudere MAI
-                    // una sessione in corso su "logout", nemmeno quando è un
-                    // logout ESPLICITO con vero cambio di account. Due motivi.
-                    // Primo, il Watch non può distinguere i due casi: lo
-                    // stesso messaggio "logout" arriva sui tre percorsi
-                    // (uscita esplicita, uscita implicita per token
-                    // scaduto/revocato, cancellazione account — vedi
-                    // notifyWatchLogout in watch-session.js), senza portare
-                    // CHI o PERCHÉ. Costruire un comportamento diverso per
-                    // "esplicito" richiederebbe indovinare una distinzione che
-                    // il messaggio non porta. Secondo, anche nel caso peggiore
-                    // (account davvero cambiato, workout lasciato aperto) non
-                    // trapela nulla di nuovo: il rischio è già coperto sul
-                    // lato SCRITTURA da `resolveSessionId`, che filtra sempre
-                    // per `member_id` — un `set_done`/`session_closed` di
-                    // questa sessione non potrà mai applicarsi alla riga di un
-                    // altro account, al più finisce scartato dopo i tentativi
-                    // di retry, esattamente come già succede oggi per un
-                    // client_session_id orfano. Chiuderla a forza qui
-                    // distruggerebbe con certezza uno sforzo fisico reale, la
-                    // stessa classe di perdita che questo branch insegue da
-                    // cinque round, in cambio di un beneficio di privacy che
-                    // nel caso peggiore non si materializza comunque.
+                    // La sessione invece NON è solo "dati dell'account
+                    // uscente": è lo sforzo fisico che chi ha il Watch al
+                    // polso sta facendo IN QUESTO MOMENTO. Cosa farne dipende
+                    // da PERCHÉ è arrivato il logout, e il messaggio ora lo
+                    // dice (`explicit`, vedi notifyWatchLogout in
+                    // watch-session.js): true per l'uscita voluta dal profilo
+                    // e per la cancellazione account, false per l'uscita
+                    // implicita — refresh token scaduto o revocato su un
+                    // telefono fermo a lungo in tasca.
+                    let explicit = (msg["explicit"] as? Bool) ?? false
                     Task { @MainActor in
-                        if WorkoutController.shared.state != .running {
+                        if explicit {
+                            // L'utente ha detto che questo telefono non è più
+                            // suo. Da qui in poi le serie di questo
+                            // allenamento non sono più salvabili DA NESSUNA
+                            // PARTE: `resolveSessionId` (watch-session.js)
+                            // risolve solo dentro il `member_id` di chi è
+                            // connesso, quindi ogni `set_done` successivo
+                            // esaurirebbe i cinque tentativi e verrebbe
+                            // scartato. Tenere aperta la sessione non
+                            // salverebbe nulla, e intanto ExecutionView
+                            // resterebbe a schermo con giornata, nomi degli
+                            // esercizi, ripetizioni e carichi dell'account
+                            // appena uscito — la stessa classe di fuga di
+                            // `pendingAdoption` qui sopra, ma visibile invece
+                            // che latente. Si chiude quindi l'allenamento per
+                            // davvero: `end()` finalizza e SALVA in Salute
+                            // (frequenza, calorie, durata restano all'utente,
+                            // che è dove appartengono), invece di lasciare una
+                            // HKWorkoutSession viva senza interfaccia — lo
+                            // slot di sistema è uno solo e resterebbe occupato.
+                            await WorkoutController.shared.end()
                             SessionStore.shared.close()
+                        } else if WorkoutController.shared.state != .running {
+                            SessionStore.shared.close()
+                        } else {
+                            // Uscita implicita: l'utente non è cambiato, molto
+                            // probabilmente rientrerà con lo stesso account e
+                            // le serie di questo allenamento si risolveranno
+                            // regolarmente. Interromperglielo qui sarebbe
+                            // distruggere uno sforzo fisico reale per un
+                            // evento di cui non si è nemmeno accorto. Si
+                            // cancella però la copia su DISCO: lasciarla
+                            // creerebbe un session.json che nessuna
+                            // interfaccia potrà più togliere e che sopprime
+                            // per sempre il banner di adozione (vedi
+                            // SessionStore.forgetPersisted()).
+                            SessionStore.shared.forgetPersisted()
                         }
                     }
                     return

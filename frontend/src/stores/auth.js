@@ -88,6 +88,9 @@ export const useAuthStore = defineStore('auth', () => {
         // Stessa minaccia, sul Watch: cache catalogo/sessione e coda di
         // ritentativo non devono sopravvivere a un utente che se n'è
         // andato, nemmeno per un logout implicito (vedi notifyWatchLogout).
+        // Senza `explicit`: qui l'utente non ha chiesto niente ed è lo
+        // stesso di prima, quindi un allenamento in corso al polso non va
+        // interrotto.
         notifyWatchLogout(oldUserId);
       }
     });
@@ -163,7 +166,10 @@ export const useAuthStore = defineStore('auth', () => {
     // Stessa invariante, sul Watch: senza questa il catalogo, la sessione e
     // la coda di ritentativo cache al polso sopravvivono all'utente che le
     // ha lasciate (vedi notifyWatchLogout).
-    notifyWatchLogout(memberId);
+    // `explicit: true`: qui l'utente ha DECISO di uscire, quindi il Watch
+    // può chiudere anche un allenamento in corso al polso — vedi
+    // notifyWatchLogout.
+    notifyWatchLogout(memberId, { explicit: true });
     user.value = null;
     profile.value = null;
   }

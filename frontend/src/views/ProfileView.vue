@@ -320,7 +320,10 @@ async function confirmDelete() {
     // a un account appena cancellato (vedi notifyWatchLogout). `user.value`
     // qui è ancora l'utente che sta per essere cancellato: va letto PRIMA
     // di `deleteOwnAccount()`, non dopo.
-    notifyWatchLogout(user.value?.id);
+    // `explicit: true`: l'account sta per sparire, non c'è nessun rientro
+    // possibile e le serie di un eventuale allenamento al polso non sarebbero
+    // più salvabili da nessuna parte (vedi notifyWatchLogout).
+    notifyWatchLogout(user.value?.id, { explicit: true });
     await deleteOwnAccount();
     // La sessione punta a un utente che non esiste più: va chiusa comunque,
     // anche se il logout fallisce per rete. (auth.logout() ripete la

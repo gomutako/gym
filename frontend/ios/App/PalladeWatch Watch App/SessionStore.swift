@@ -90,14 +90,45 @@ final class SessionStore: ObservableObject {
                     })
             })
         session = s
+        // Una nuova sessione riapre la persistenza eventualmente sospesa da
+        // un `forgetPersisted()` precedente: quel blocco valeva per la
+        // sessione dell'account uscito, non per questa.
+        persistenceSuspended = false
         persist()
         return s
     }
 
     func close() {
         session = nil
+        persistenceSuspended = false
         try? FileManager.default.removeItem(at: url)
         RestNotifier.cancel()
+    }
+
+    /// Cancella la copia su disco lasciando VIVA la sessione in memoria (e
+    /// quindi l'allenamento al polso e la sua HKWorkoutSession, che qui non
+    /// si tocca).
+    ///
+    /// Serve al logout arrivato dall'iPhone mentre un allenamento è in
+    /// corso: lì `close()` non si può chiamare — distruggerebbe uno sforzo
+    /// fisico reale — ma lasciare `session.json` sul disco lascia un file
+    /// che nessuno potrà più togliere. Al lancio successivo `init()` lo
+    /// ricarica in `session` mentre `WorkoutController` è `.idle`, quindi
+    /// `ContentView` non mostra `ExecutionView` (che pretende `.running`) e
+    /// non esiste nessun percorso di interfaccia per chiuderla; da quel
+    /// momento `store.session != nil` sopprime PER SEMPRE il banner di
+    /// adozione, che `ContentView.requestState` offre solo quando la
+    /// sessione è nil — per l'utente successivo e per tutti quelli dopo.
+    ///
+    /// La persistenza resta sospesa fino alla prossima `begin()`/`adopt()`:
+    /// altrimenti il primo "fatto" segnato dopo il logout riscriverebbe il
+    /// file e ricreerebbe esattamente l'orfano. Il prezzo è che se l'app
+    /// viene terminata prima della fine di QUEST'ALLENAMENTO non si
+    /// recupera al riavvio — un peggioramento che vale solo dopo un logout
+    /// a metà allenamento, mentre l'orfano avvelenava ogni avvio futuro.
+    func forgetPersisted() {
+        persistenceSuspended = true
+        try? FileManager.default.removeItem(at: url)
     }
 
     /// Adotta una sessione già aperta sull'iPhone (aggancio a metà sessione).
@@ -140,6 +171,7 @@ final class SessionStore: ObservableObject {
             startedAt: (payload["started_at"] as? String)
                 .flatMap { ISO8601DateFormatter.withFraction.date(from: $0) } ?? Date(),
             exercises: exercises)
+        persistenceSuspended = false // vedi begin()
         persist()
         return true
     }
@@ -202,8 +234,14 @@ final class SessionStore: ObservableObject {
         return at.addingTimeInterval(TimeInterval(ex.restSeconds))
     }
 
+    /// Vero dopo `forgetPersisted()`: la sessione continua a vivere in
+    /// memoria ma non torna più sul disco, o il file appena cancellato
+    /// rinascerebbe al primo "fatto".
+    private var persistenceSuspended = false
+
     private func persist() {
-        guard let s = session, let data = try? JSONEncoder().encode(s) else { return }
+        guard !persistenceSuspended,
+              let s = session, let data = try? JSONEncoder().encode(s) else { return }
         try? data.write(to: url, options: .atomic)
     }
 }
