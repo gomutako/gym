@@ -186,7 +186,32 @@ struct ContentView: View {
                             // che è dove appartengono), invece di lasciare una
                             // HKWorkoutSession viva senza interfaccia — lo
                             // slot di sistema è uno solo e resterebbe occupato.
-                            await WorkoutController.shared.end()
+                            //
+                            // ⚠️ `state == .running` NON è ridondante, ed è la
+                            // stessa condizione (per la stessa ragione) del
+                            // guard in `didChangeTo` di WorkoutController. Ogni
+                            // altro chiamante di `end()` è il tasto "Fine" di
+                            // ExecutionView, che esiste solo quando lo stato è
+                            // già `.running`; questo invece può arrivare in
+                            // qualunque istante, compresa la finestra dentro
+                            // `start()` in cui `session`/`builder` sono già
+                            // assegnati ma `state` non è ancora `.running`
+                            // (fino a 8s, il timeout per "allenamento già
+                            // attivo altrove"). Lì `takeOwnershipForFinalization`
+                            // riuscirebbe e `finalize()` chiamerebbe
+                            // endCollection/finishWorkout mentre `start()`
+                            // aspetta ancora `beginCollection` sullo STESSO
+                            // HKLiveWorkoutBuilder — due chiamate di lifecycle
+                            // concorrenti, non supportate da HealthKit. E se
+                            // poi `beginCollection` vincesse la corsa, `start()`
+                            // scriverebbe `.running` sopra `.ended` con
+                            // session/builder ormai nil: `end()` diventerebbe
+                            // un no-op e il `guard state != .running` di
+                            // `start()` rifiuterebbe per sempre ogni nuovo
+                            // allenamento fino al riavvio dell'app.
+                            if WorkoutController.shared.state == .running {
+                                await WorkoutController.shared.end()
+                            }
                             SessionStore.shared.close()
                         } else if WorkoutController.shared.state != .running {
                             SessionStore.shared.close()

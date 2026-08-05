@@ -320,10 +320,21 @@ async function confirmDelete() {
     // a un account appena cancellato (vedi notifyWatchLogout). `user.value`
     // qui è ancora l'utente che sta per essere cancellato: va letto PRIMA
     // di `deleteOwnAccount()`, non dopo.
-    // `explicit: true`: l'account sta per sparire, non c'è nessun rientro
-    // possibile e le serie di un eventuale allenamento al polso non sarebbero
-    // più salvabili da nessuna parte (vedi notifyWatchLogout).
-    notifyWatchLogout(user.value?.id, { explicit: true });
+    //
+    // SENZA `explicit`, di proposito, ed è ciò che tiene in piedi il
+    // ragionamento sul costo qui sopra. Le tre cose per cui questo invio
+    // sta PRIMA della chiamata di rete — catalogo, `pendingAdoption` e coda
+    // di ritentativo — il Watch le cancella comunque, `explicit` o no.
+    // L'unica cosa che `explicit` aggiunge è chiudere a forza un
+    // allenamento in corso al polso: irreversibile, e qui ancora ipotetico
+    // perché l'account potrebbe benissimo continuare a esistere (una
+    // `deleteOwnAccount()` fallita per rete). Se fosse `true`, il costo di
+    // un fallimento smetterebbe di essere "per un attimo non puoi
+    // riprendere dal Watch" e diventerebbe "ti è stato interrotto un
+    // allenamento vero". La forma esplicita parte comunque un istante
+    // dopo, da `auth.logout()`, cioè solo quando la cancellazione è un
+    // fatto compiuto.
+    notifyWatchLogout(user.value?.id);
     await deleteOwnAccount();
     // La sessione punta a un utente che non esiste più: va chiusa comunque,
     // anche se il logout fallisce per rete. (auth.logout() ripete la
