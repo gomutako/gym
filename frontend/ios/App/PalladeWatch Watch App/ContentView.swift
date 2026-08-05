@@ -260,43 +260,44 @@ private func sessionStartedPayload(_ s: LiveSession) -> [String: Any] {
         "day_name": s.dayName,
         "started_at": ISO8601DateFormatter.withFraction.string(from: s.startedAt),
         "exercises_log": s.exercises.map { ex in
-            [
+            // `target_reps`/`has_incline`: senza queste due chiavi una
+            // sessione nata al polso arriva sull'iPhone con "3x" invece di
+            // "3x10" e senza colonna inclinazione — `CachedExercise` le
+            // porta già (popolate da watch-catalog.js), ma `begin()` non le
+            // copiava in `LiveExercise`.
+            //
+            // NESSUN campo opzionale qui usa NSNull(): WatchConnectivity
+            // accetta solo tipi property-list (NSString, NSNumber, NSDate,
+            // NSData, NSArray, NSDictionary), e NSNull non è uno di questi —
+            // un payload che lo contiene, anche una sola volta e in un
+            // punto qualsiasi (anche annidato in `sets_log`), viene scartato
+            // per INTERO e in silenzio: non un crash, non un errore,
+            // l'error handler di PhoneLink.send è vuoto di proposito per il
+            // traffico best-effort. `load` è quasi sempre nil qui — è il
+            // caso normale alla prima volta su un esercizio, senza sessione
+            // precedente da cui precompilare — quindi senza omettere la
+            // chiave, `session_started` non arriverebbe MAI per la maggior
+            // parte degli allenamenti, e l'iPhone non saprebbe che la
+            // sessione esiste. Regola: quando un valore manca si OMETTE LA
+            // CHIAVE, mai `null`.
+            var row: [String: Any] = [
                 "exercise_id": ex.exerciseId,
-                // `target_reps`/`has_incline`: senza queste due chiavi una
-                // sessione nata al polso arriva sull'iPhone con "3x" invece
-                // di "3x10" e senza colonna inclinazione — `CachedExercise`
-                // le porta già (popolate da watch-catalog.js), ma `begin()`
-                // non le copiava in `LiveExercise`. `target_reps` come gli
-                // altri opzionali di questo payload (`as Any? ?? NSNull()`,
-                // mai `as Any` nudo: un Optional.none incapsulato da solo fa
-                // scartare l'INTERO payload da WatchConnectivity).
-                "target_reps": ex.targetReps as Any? ?? NSNull(),
                 "rest_seconds": ex.restSeconds,
                 "load_type": ex.loadType,
                 "has_incline": ex.hasIncline,
                 "sets_log": ex.sets.map { r -> [String: Any] in
-                    // `as Any? ?? NSNull()`, non `as Any`: un Optional.none
-                    // incapsulato da solo rende il dizionario non
-                    // deserializzabile da WatchConnectivity, che scarta
-                    // l'INTERO payload in silenzio (stesso pattern già
-                    // corretto in WorkoutController.publishBiometrics e
-                    // HealthKitLivePlugin.swift). `load` è quasi sempre nil
-                    // qui — è il caso normale alla prima volta su un
-                    // esercizio, senza sessione precedente da cui
-                    // precompilare — quindi senza questo fix session_started
-                    // non arriverebbe MAI per la maggior parte degli
-                    // allenamenti, e l'iPhone non saprebbe che la sessione
-                    // esiste.
-                    var row: [String: Any] = [
+                    var setRow: [String: Any] = [
                         "uid": r.uid,
-                        "reps": r.reps as Any? ?? NSNull(),
-                        "load": r.load as Any? ?? NSNull(),
                         "done": r.done,
                     ]
-                    if let inc = r.incline { row["incline"] = inc }
-                    return row
+                    if let reps = r.reps { setRow["reps"] = reps }
+                    if let load = r.load { setRow["load"] = load }
+                    if let inc = r.incline { setRow["incline"] = inc }
+                    return setRow
                 },
-            ] as [String: Any]
+            ]
+            if let targetReps = ex.targetReps { row["target_reps"] = targetReps }
+            return row as [String: Any]
         },
     ]
 }

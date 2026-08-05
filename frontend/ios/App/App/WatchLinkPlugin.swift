@@ -172,9 +172,40 @@ public class WatchLinkPlugin: CAPPlugin, WCSessionDelegate {
     /// Legge la copia su disco. Non passa dalla `queue` del buffer: è una
     /// risorsa scalare indipendente (ultimo stato vince), non un accumulo
     /// ordinato da consegnare per intero.
+    ///
+    /// ⚠️ Il risultato passa da `stripNullish` prima di tornare: il file è
+    /// scritto da `setSessionState` con `session.value.exercises_log` COSÌ
+    /// COM'È da `SessionView.vue` (mai passato da watch-catalog.js), e quel
+    /// log ha `reps`/`load` espliciti a `null` per ogni serie non ancora
+    /// fatta senza storico — il caso comune. `JSONSerialization` decodifica
+    /// quei `null` in `NSNull`, legale dentro un documento JSON su disco ma
+    /// non nella risposta che ne esce: questo dizionario finisce SOLO nel
+    /// `replyHandler` di `state_request`, e WatchConnectivity scarta l'INTERA
+    /// risposta se contiene NSNull ovunque, annidato compreso. Stessa regola
+    /// del lato Watch, applicata qui al confine di lettura perché la fonte
+    /// (il file JSON) non è sotto controllo diretto in questo punto.
     private func currentSessionState() -> [String: Any]? {
         guard let data = try? Data(contentsOf: stateURL) else { return nil }
-        return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        guard let raw = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        return stripNullish(raw) as? [String: Any]
+    }
+
+    /// Toglie ricorsivamente le chiavi `NSNull` (e gli elementi `NSNull`
+    /// negli array) da una struttura JSON già decodificata. Vedi il commento
+    /// su `currentSessionState()` per il perché.
+    private func stripNullish(_ value: Any) -> Any? {
+        if value is NSNull { return nil }
+        if let dict = value as? [String: Any] {
+            var out: [String: Any] = [:]
+            for (key, v) in dict {
+                if let stripped = stripNullish(v) { out[key] = stripped }
+            }
+            return out
+        }
+        if let array = value as? [Any] {
+            return array.compactMap { stripNullish($0) }
+        }
+        return value
     }
 
     // MARK: - Buffer
@@ -267,10 +298,21 @@ public class WatchLinkPlugin: CAPPlugin, WCSessionDelegate {
             replyHandler([:])
             return
         }
-        // `as Any? ?? NSNull()`, non `as Any`: un Optional.none incapsulato
-        // da solo fa scartare l'INTERA risposta da WatchConnectivity (stesso
-        // pattern già applicato in sessionStartedPayload/publishBiometrics).
-        replyHandler(["session": currentSessionState() as Any? ?? NSNull()])
+        // NIENTE NSNull() qui: WatchConnectivity accetta solo tipi
+        // property-list (NSString, NSNumber, NSDate, NSData, NSArray,
+        // NSDictionary), e NSNull non è uno di questi — una risposta che lo
+        // contiene viene scartata per INTERO e in silenzio (stesso motivo
+        // già corretto in sessionStartedPayload/publishBiometrics, sul lato
+        // Watch). Quando non c'è nessuna sessione da offrire in adozione, si
+        // OMETTE la chiave `session` invece di mandarla `null`: dal lato
+        // Watch `reply["session"] as? [String: Any]` legge `nil` in
+        // entrambi i casi (chiave assente o valore non castabile), quindi
+        // `PhoneLink.requestState` si comporta identico.
+        if let session = currentSessionState() {
+            replyHandler(["session": session])
+        } else {
+            replyHandler([:])
+        }
     }
 
     public func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any]) {

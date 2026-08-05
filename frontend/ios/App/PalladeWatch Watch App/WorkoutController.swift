@@ -172,16 +172,24 @@ final class WorkoutController: NSObject, ObservableObject {
         // chiamare più volte per lo stesso istante.
         guard Date().timeIntervalSince(lastPublish) > 1 else { return }
         lastPublish = Date()
-        // `as Any` da solo può incapsulare un Optional.none invece di NSNull:
-        // WatchConnectivity non sa deserializzarlo e scarta l'INTERO payload in
-        // silenzio (l'error handler di PhoneLink.send è vuoto di proposito). Lo
-        // stesso pattern è già in HealthKitLivePlugin.swift lato iPhone.
-        PhoneLink.shared.send([
+        // `hr`/`kcal` NON usano NSNull(): WatchConnectivity accetta solo
+        // tipi property-list (NSString, NSNumber, NSDate, NSData, NSArray,
+        // NSDictionary) e NSNull non è uno di questi. Un payload che lo
+        // contiene viene scartato per INTERO in silenzio — non un crash, non
+        // un errore, perché l'error handler di PhoneLink.send è vuoto di
+        // proposito per il traffico best-effort. La regola è omettere la
+        // chiave quando il valore manca, mai mandare null (stesso pattern in
+        // ExecutionView.markDone, in questo target). Diverso il caso di
+        // HealthKitLivePlugin.swift lato iPhone: lì `NSNull()` va bene,
+        // perché `call.resolve` passa dal bridge Capacitor/JSON, non da
+        // WatchConnectivity — è un trasporto diverso con regole diverse.
+        var payload: [String: Any] = [
             "type": "biometrics",
-            "hr": heartRate as Any? ?? NSNull(),
-            "kcal": activeKcal as Any? ?? NSNull(),
             "at": ISO8601DateFormatter().string(from: Date()),
-        ], queued: false)
+        ]
+        if let hr = heartRate { payload["hr"] = hr }
+        if let kcal = activeKcal { payload["kcal"] = kcal }
+        PhoneLink.shared.send(payload, queued: false)
     }
 
     enum WorkoutError: LocalizedError {

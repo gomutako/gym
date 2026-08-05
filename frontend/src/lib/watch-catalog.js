@@ -71,9 +71,19 @@ export async function pushCatalog(memberId, workouts) {
             // sessione. Gli uid definitivi nascono quando il Watch apre la
             // sessione, altrimenti due sessioni dalla stessa cache
             // condividerebbero le identità delle serie.
+            //
+            // `reps`/`load` sono `null` per qualunque esercizio senza
+            // storico (il caso normale la prima volta), e `r.incline` è
+            // `undefined` per gli esercizi senza pendenza (la chiave non
+            // esiste in `r`, vedi buildSnapshotLog). Nessuno dei tre si
+            // ripulisce qui con un ternario o un `?? null`: lo fa
+            // `watch.setContext` da sé, per ogni chiamante — vedi
+            // `stripNullish` in `lib/watch.js` per il perché (WatchConnectivity
+            // scarta l'INTERO payload se contiene anche un solo `NSNull`,
+            // in silenzio). Scrivere qui i null "veri" tiene questo oggetto
+            // leggibile e debuggabile prima che la pulizia lo attraversi.
             suggested: ex.sets_log.map((r) => ({
-              reps: r.reps, load: r.load,
-              ...(ex.has_incline ? { incline: r.incline ?? null } : {}),
+              reps: r.reps, load: r.load, incline: r.incline,
             })),
           })),
         };

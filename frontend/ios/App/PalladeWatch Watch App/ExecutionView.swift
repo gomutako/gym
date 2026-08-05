@@ -90,27 +90,26 @@ struct ExecutionView: View {
         // Una serie chiusa non può andare persa: il telefono può stare
         // nell'armadietto per l'intero allenamento (queued: true).
         //
-        // `reps`/`load` usano `as Any? ?? NSNull()`, non `as Any`: un
-        // Optional.none incapsulato da solo rende il dizionario non
-        // deserializzabile da WatchConnectivity, che scarta l'INTERO
-        // messaggio in silenzio (stesso pattern già corretto in
-        // WorkoutController.publishBiometrics, in questo target).
-        //
-        // `incline` invece NON usa lo stesso fallback: session-merge.js
-        // distingue una chiave assente da una esplicitamente `null` (vedi il
-        // commento lì) per non introdurre `incline` sugli esercizi che non
-        // lo prevedono. Se mandassimo sempre la chiave (anche NSNull per gli
-        // esercizi senza pendenza), ogni set_done dal Watch farebbe
-        // comparire `incline: null` anche dove non è mai esistito. Per
-        // questo la chiave si aggiunge SOLO quando c'è un valore.
+        // NÉ `reps`/`load` NÉ `incline` usano `NSNull()`: WatchConnectivity
+        // (updateApplicationContext, sendMessage, transferUserInfo,
+        // replyHandler) accetta solo tipi property-list — NSString,
+        // NSNumber, NSDate, NSData, NSArray, NSDictionary — e NSNull non è
+        // uno di questi. Un payload che la contiene, anche in un solo
+        // campo, viene scartato per INTERO e in silenzio: non un crash, non
+        // un errore, perché l'error handler di WatchConnectivity è vuoto di
+        // proposito per il traffico best-effort. `reps`/`load` sono `nil`
+        // quasi sempre alla prima serie di un esercizio senza storico, quindi
+        // senza questa regola `set_done` non arriverebbe MAI in quel caso.
+        // La regola è quindi UNA sola, applicata a ogni campo opzionale:
+        // quando manca un valore si OMETTE LA CHIAVE, non si manda null.
         var payload: [String: Any] = [
             "type": "set_done",
             "client_session_id": store.session?.clientSessionId ?? "",
             "uid": set.uid,
-            "reps": set.reps as Any? ?? NSNull(),
-            "load": set.load as Any? ?? NSNull(),
             "done_at": ISO8601DateFormatter.withFraction.string(from: at),
         ]
+        if let reps = set.reps { payload["reps"] = reps }
+        if let load = set.load { payload["load"] = load }
         if let inc = set.incline { payload["incline"] = inc }
         PhoneLink.shared.send(payload, queued: true)
     }
